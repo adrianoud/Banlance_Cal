@@ -30,7 +30,7 @@ class ProjectManager:
         """确保项目目录存在"""
         if not os.path.exists(self.projects_dir):
             os.makedirs(self.projects_dir)
-            
+
     def get_project_list(self):
         """获取项目列表"""
         projects = []
@@ -173,7 +173,7 @@ class EnergyDataModel:
                     'panel_area': 1000.0
                 },
                 'count': 10,  # 光伏板数量
-                'output_correction_factor': 1.0  # 出力修正系数，默认值为1
+                'output_correction_factor': 1.0  # 出力修正系数，默认値为1
             }
         ]
         
@@ -185,6 +185,16 @@ class EnergyDataModel:
         # 新增调峰机组最小出力参数
         self.peak_power_min = 0.0
         self.peak_power_max = 2000.0
+        
+        # 最大电力负荷参数
+        self.max_electric_load = 5000.0
+        
+        # 检修和投产计划数据
+        self.maintenance_schedules = []  # 检修计划列表
+        self.commissioning_schedules = []  # 投产计划列表
+        
+        # 出力限制计划数据
+        self.output_limit_schedules = []  # 出力限制计划列表
         
     def calculate_wind_total_capacity(self):
         """
@@ -229,15 +239,6 @@ class EnergyDataModel:
             total_capacity += capacity
         return total_capacity
         
-        # 最大电力负荷参数
-        self.max_electric_load = 5000.0
-        
-        # 检修和投产计划数据
-        self.maintenance_schedules = []  # 检修计划列表
-        self.commissioning_schedules = []  # 投产计划列表
-        
-        # 出力限制计划数据
-        self.output_limit_schedules = []  # 出力限制计划列表
 
     def to_dict(self):
         """将数据模型转换为字典，用于保存"""
@@ -284,7 +285,7 @@ class EnergyDataModel:
                     'rated_power': 2000.0
                 },
                 'count': 10,
-                'output_correction_factor': 1.0  # 出力修正系数，默认值为1
+                'output_correction_factor': 1.0  # 出力修正系数，默认値为1
             }
         ])
         self.pv_models = data.get('pv_models', [
@@ -296,7 +297,7 @@ class EnergyDataModel:
                     'panel_area': 1000.0
                 },
                 'count': 10,
-                'output_correction_factor': 1.0  # 出力修正系数，默认值为1
+                'output_correction_factor': 1.0  # 出力修正系数，默认値为1
             }
         ])
         self.chp_electric_params = data.get('chp_electric_params', {
@@ -317,27 +318,6 @@ class EnergyDataModel:
         # 加载计算结果（如果有）
         calculation_results = data.get('calculation_results')
         return calculation_results
-
-    def to_dict(self):
-        """将数据模型转换为字典，用于保存"""
-        data = {
-            'electric_load_hourly': self.electric_load_hourly,
-            'heat_load_hourly': self.heat_load_hourly,
-            'internal_electric_rate': self.internal_electric_rate,
-            'solar_irradiance_hourly': self.solar_irradiance_hourly,
-            'wind_speed_hourly': self.wind_speed_hourly,
-            'data_imported': self.data_imported,
-            'wind_turbine_models': self.wind_turbine_models,
-            'pv_models': self.pv_models,
-            'chp_electric_params': self.chp_electric_params,
-            'peak_power_min': self.peak_power_min,
-            'peak_power_max': self.peak_power_max,
-            'max_electric_load': self.max_electric_load,
-            'maintenance_schedules': self.maintenance_schedules,
-            'commissioning_schedules': self.commissioning_schedules,
-            'output_limit_schedules': self.output_limit_schedules
-        }
-        return data
 
 # 风机出力与风速函数关系
 def wind_power_function(wind_speed, params, correction_factor=1.0):
