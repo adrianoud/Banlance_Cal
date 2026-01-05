@@ -1,0 +1,5 @@
+# XJ项目依赖项
+tkinter
+matplotlib
+numpy
+openpyxl
