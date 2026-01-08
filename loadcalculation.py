@@ -1076,6 +1076,35 @@ class EnergyBalanceApp:
         back_btn = ttk.Button(self.root, text="返回项目列表", command=self.return_to_project_list)
         back_btn.place(relx=1.0, rely=0.0, anchor="ne", x=-10, y=10)
         
+        # 检查并自动加载已存在的数据或计算结果
+        self.auto_load_existing_data()
+        
+    def auto_load_existing_data(self):
+        """
+        自动加载已存在的数据或计算结果
+        """
+        if self.current_project:
+            project_data = self.project_manager.load_project_data(self.current_project['id'])
+            if project_data is not None:
+                # 检查是否已存在导入的数据
+                has_imported_data = any([
+                    any(self.data_model.electric_load_hourly),
+                    any(self.data_model.heat_load_hourly),
+                    any(self.data_model.solar_irradiance_hourly),
+                    any(self.data_model.wind_speed_hourly)
+                ])
+                
+                if has_imported_data:
+                    # 更新数据统计和趋势图
+                    self.update_statistics()
+                    self.update_imported_data_plot()
+                    
+                # 检查是否已存在计算结果
+                if 'calculation_results' in project_data and project_data['calculation_results']:
+                    self.results = project_data['calculation_results']
+                    self.display_results()
+                    self.update_plot()
+        
     def return_to_project_list(self):
         """返回项目列表界面"""
         # 保存当前项目数据
@@ -1142,11 +1171,6 @@ class EnergyBalanceApp:
         
         # 启用matplotlib交互功能
         self.data_figure.tight_layout()
-        
-        # 绑定鼠标事件
-        self.data_canvas.mpl_connect('scroll_event', self.on_mouse_wheel_data)
-        self.data_canvas.mpl_connect('button_press_event', self.on_press_data)
-        self.data_canvas.mpl_connect('motion_notify_event', self.on_drag_data)
         
     def update_imported_data_plot(self):
         """
