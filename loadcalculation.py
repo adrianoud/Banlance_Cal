@@ -2,6 +2,8 @@ import tkinter as tk
 from tkinter import ttk, messagebox, filedialog, PhotoImage
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.figure import Figure
+from matplotlib.widgets import SpanSelector
 import numpy as np
 import csv
 import json
@@ -858,6 +860,10 @@ class EnergyBalanceApp:
         self.calculator = AnnualBalanceCalculator(self.data_model)
         self.results = None
         
+        # 初始化图表交互变量
+        self.pan_mode = False
+        self.zoom_mode = False
+        
         # 创建UI
         self.create_project_management_ui()
         
@@ -1109,13 +1115,18 @@ class EnergyBalanceApp:
         main_frame.columnconfigure(0, weight=1)
         main_frame.rowconfigure(0, weight=1)
         
+        # 配置notebook的权重，确保标签页内容可以正确缩放
+        notebook.columnconfigure(0, weight=1)
+        notebook.rowconfigure(0, weight=1)
+        
     def initialize_data_plot(self):
         """
         初始化导入数据趋势图
         """
         # 检查是否已经创建了图形对象，如果没有则创建
         if not hasattr(self, 'data_ax'):
-            self.data_figure, self.data_ax = plt.subplots(figsize=(10, 4))
+            self.data_figure = Figure(figsize=(10, 4), dpi=100)
+            self.data_ax = self.data_figure.add_subplot(111)
         
         self.data_ax.clear()
         self.data_ax.text(0.5, 0.5, '暂无数据\n请导入数据后查看趋势图', 
@@ -1129,6 +1140,14 @@ class EnergyBalanceApp:
             
         self.data_canvas.draw()
         
+        # 启用matplotlib交互功能
+        self.data_figure.tight_layout()
+        
+        # 绑定鼠标事件
+        self.data_canvas.mpl_connect('scroll_event', self.on_mouse_wheel_data)
+        self.data_canvas.mpl_connect('button_press_event', self.on_press_data)
+        self.data_canvas.mpl_connect('motion_notify_event', self.on_drag_data)
+        
     def update_imported_data_plot(self):
         """
         更新已导入数据的趋势图
@@ -1136,31 +1155,85 @@ class EnergyBalanceApp:
         # 清除之前的图表
         self.data_ax.clear()
         
-        # 绘制前168小时（一周）的数据作为示例
-        hours = list(range(min(168, 8760)))
+        # 解析时间段
+        try:
+            start_date = datetime.strptime(self.start_date_var.get(), "%Y-%m-%d")
+            end_date = datetime.strptime(self.end_date_var.get(), "%Y-%m-%d")
+        except ValueError:
+            messagebox.showerror("错误", "日期格式不正确，请使用 YYYY-MM-DD 格式")
+            return
+        
+        # 计算时间段对应的小时索引
+        start_hour = self.date_to_hour(start_date)
+        end_hour = self.date_to_hour(end_date)
+        
+        if start_hour > end_hour:
+            messagebox.showerror("错误", "开始日期不能晚于结束日期")
+            return
+        
+        if start_hour < 0 or end_hour >= 8760:
+            messagebox.showerror("错误", "日期超出范围，应在2025-01-01至2025-12-31之间")
+            return
+        
+        # 获取时间段内的数据
+        hours = list(range(start_hour, end_hour + 1))
         
         # 绘制已导入的数据
+        lines = []  # 存储所有绘制的线条
+        labels = []  # 存储所有标签
+        
         if self.data_model.data_imported['electric']:
-            electric_data = self.data_model.electric_load_hourly[:len(hours)]
-            self.data_ax.plot(hours, electric_data, label='电力负荷(kW)', linewidth=1)
+            electric_data = [self.data_model.electric_load_hourly[i] for i in hours]
+            line, = self.data_ax.plot(hours, electric_data, label='电力负荷(kW)', linewidth=0.5)
+            lines.append(line)
+            labels.append('电力负荷(kW)')
             
         if self.data_model.data_imported['heat']:
-            heat_data = self.data_model.heat_load_hourly[:len(hours)]
-            self.data_ax.plot(hours, heat_data, label='热力负荷(kW)', linewidth=1)
+            heat_data = [self.data_model.heat_load_hourly[i] for i in hours]
+            line, = self.data_ax.plot(hours, heat_data, label='热力负荷(kW)', linewidth=0.5)
+            lines.append(line)
+            labels.append('热力负荷(kW)')
             
         if self.data_model.data_imported['solar']:
-            solar_data = self.data_model.solar_irradiance_hourly[:len(hours)]
-            self.data_ax.plot(hours, solar_data, label='光照强度(W/m²)', linewidth=1)
+            solar_data = [self.data_model.solar_irradiance_hourly[i] for i in hours]
+            line, = self.data_ax.plot(hours, solar_data, label='光照强度(W/m²)', linewidth=0.5)
+            lines.append(line)
+            labels.append('光照强度(W/m²)')
             
         if self.data_model.data_imported['wind']:
-            wind_data = self.data_model.wind_speed_hourly[:len(hours)]
-            self.data_ax.plot(hours, wind_data, label='风速(m/s)', linewidth=1)
+            wind_data = [self.data_model.wind_speed_hourly[i] for i in hours]
+            line, = self.data_ax.plot(hours, wind_data, label='风速(m/s)', linewidth=0.5)
+            lines.append(line)
+            labels.append('风速(m/s)')
         
         self.data_ax.set_xlabel('小时')
         self.data_ax.set_ylabel('数值')
-        self.data_ax.set_title('已导入数据趋势图 (前168小时)')
-        self.data_ax.legend()
+        self.data_ax.set_title(f'已导入数据趋势图 ({self.start_date_var.get()} 至 {self.end_date_var.get()})')
+        
+        # 创建图例并启用点击功能
+        legend = self.data_ax.legend()
+        
+        # 启用图例点击交互
+        lined = {}
+        for legline, origline in zip(legend.get_lines(), lines):
+            legline.set_picker(True)  # Enable picking on the legend line
+            lined[legline] = origline
+        
+        # 为图例中的文本也启用点击
+        for legtext, origline in zip(legend.get_texts(), lines):
+            legtext.set_picker(True)  # Enable picking on the legend text
+            lined[legtext] = origline
+        
+        # 保存线条和图例映射关系
+        self.lined_data = lined
+        
+        # 连接点击事件
+        self.data_canvas.mpl_connect('pick_event', self.on_legend_click_data)
+        
         self.data_ax.grid(True, alpha=0.3)
+        
+        # 设置x轴范围
+        self.data_ax.set_xlim(start_hour, end_hour)
         
         # 刷新画布
         self.data_canvas.draw()
@@ -1250,28 +1323,47 @@ class EnergyBalanceApp:
         
         # 数据统计
         stats_frame = ttk.LabelFrame(tab, text="数据统计", padding="10")
-        stats_frame.grid(row=10, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=10)
+        stats_frame.grid(row=10, column=0, columnspan=3, sticky=(tk.W, tk.E, tk.N, tk.S), pady=10)
         
-        self.stats_text = tk.Text(stats_frame, height=8, width=80)
+        self.stats_text = tk.Text(stats_frame, height=4, width=80)
         scrollbar = ttk.Scrollbar(stats_frame, orient=tk.VERTICAL, command=self.stats_text.yview)
         self.stats_text.configure(yscrollcommand=scrollbar.set)
         
         self.stats_text.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
         
+        # 时间段选择区域
+        time_range_frame = ttk.LabelFrame(tab, text="时间段选择", padding="10")
+        time_range_frame.grid(row=11, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=10)
+        
+        ttk.Label(time_range_frame, text="开始日期:").grid(row=0, column=0, sticky=tk.W, padx=(0, 5))
+        self.start_date_var = tk.StringVar(value="2025-01-01")
+        self.start_date_entry = ttk.Entry(time_range_frame, textvariable=self.start_date_var, width=12)
+        self.start_date_entry.grid(row=0, column=1, padx=5)
+        
+        ttk.Label(time_range_frame, text="结束日期:").grid(row=0, column=2, sticky=tk.W, padx=(10, 5))
+        self.end_date_var = tk.StringVar(value="2025-12-31")
+        self.end_date_entry = ttk.Entry(time_range_frame, textvariable=self.end_date_var, width=12)
+        self.end_date_entry.grid(row=0, column=3, padx=5)
+        
+        ttk.Button(time_range_frame, text="更新图表", command=self.update_imported_data_plot).grid(row=0, column=4, padx=(10, 0))
+        
         # 图表展示（用于显示导入数据的趋势）
         plot_frame = ttk.LabelFrame(tab, text="已导入数据趋势图", padding="10")
-        plot_frame.grid(row=11, column=0, columnspan=3, sticky=(tk.W, tk.E, tk.N, tk.S), pady=10)
+        plot_frame.grid(row=12, column=0, columnspan=3, sticky=(tk.W, tk.E, tk.N, tk.S), pady=10)
         
         # 创建matplotlib图形
-        self.data_figure, self.data_ax = plt.subplots(figsize=(10, 4))
+        self.data_figure = Figure(figsize=(10, 3), dpi=100)  # 调整高度
+        self.data_ax = self.data_figure.add_subplot(111)
         self.data_canvas = FigureCanvasTkAgg(self.data_figure, plot_frame)
         self.data_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
         
         # 配置权重
         tab.columnconfigure(0, weight=1)
+        tab.rowconfigure(12, weight=1)  # 给图表区域分配更多空间
         stats_frame.columnconfigure(0, weight=1)
         stats_frame.rowconfigure(0, weight=1)
+        time_range_frame.columnconfigure(5, weight=1)
         plot_frame.columnconfigure(0, weight=1)
         plot_frame.rowconfigure(0, weight=1)
         
@@ -2021,29 +2113,47 @@ class EnergyBalanceApp:
         
         # 结果展示
         result_frame = ttk.LabelFrame(tab, text="计算结果", padding="10")
-        result_frame.grid(row=2, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(0, 20))
+        result_frame.grid(row=2, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(0, 10))
         
-        self.result_text = tk.Text(result_frame, height=15, width=100)
+        self.result_text = tk.Text(result_frame, height=8, width=100)
         scrollbar = ttk.Scrollbar(result_frame, orient=tk.VERTICAL, command=self.result_text.yview)
         self.result_text.configure(yscrollcommand=scrollbar.set)
         
         self.result_text.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
         
+        # 时间段选择区域
+        time_range_frame = ttk.LabelFrame(tab, text="时间段选择", padding="10")
+        time_range_frame.grid(row=3, column=0, sticky=(tk.W, tk.E), pady=(0, 10))
+        
+        ttk.Label(time_range_frame, text="开始日期:").grid(row=0, column=0, sticky=tk.W, padx=(0, 5))
+        self.result_start_date_var = tk.StringVar(value="2025-01-01")
+        self.result_start_date_entry = ttk.Entry(time_range_frame, textvariable=self.result_start_date_var, width=12)
+        self.result_start_date_entry.grid(row=0, column=1, padx=5)
+        
+        ttk.Label(time_range_frame, text="结束日期:").grid(row=0, column=2, sticky=tk.W, padx=(10, 5))
+        self.result_end_date_var = tk.StringVar(value="2025-12-31")
+        self.result_end_date_entry = ttk.Entry(time_range_frame, textvariable=self.result_end_date_var, width=12)
+        self.result_end_date_entry.grid(row=0, column=3, padx=5)
+        
+        ttk.Button(time_range_frame, text="更新图表", command=self.update_plot).grid(row=0, column=4, padx=(10, 0))
+        
         # 图表展示
         plot_frame = ttk.LabelFrame(tab, text="可视化展示", padding="10")
-        plot_frame.grid(row=3, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        plot_frame.grid(row=4, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         
         # 创建matplotlib图形
-        self.figure, self.ax = plt.subplots(figsize=(10, 4))
+        self.figure = Figure(figsize=(10, 3), dpi=100)  # 调整高度
+        self.ax = self.figure.add_subplot(111)
         self.canvas = FigureCanvasTkAgg(self.figure, plot_frame)
         self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
         
         # 配置权重
         tab.columnconfigure(0, weight=1)
-        tab.rowconfigure(2, weight=1)
+        tab.rowconfigure(4, weight=1)  # 给图表区域分配更多空间
         result_frame.columnconfigure(0, weight=1)
         result_frame.rowconfigure(0, weight=1)
+        time_range_frame.columnconfigure(5, weight=1)
         plot_frame.columnconfigure(0, weight=1)
         plot_frame.rowconfigure(0, weight=1)
         
@@ -2862,34 +2972,86 @@ class EnergyBalanceApp:
         # 清除之前的图表
         self.ax.clear()
         
-        # 绘制前168小时（一周）的数据作为示例
-        hours = list(range(min(168, len(self.results['hourly_total_load']))))
-        total_load = self.results['hourly_total_load'][:len(hours)]
-        generation = self.results['hourly_generation'][:len(hours)]
-        grid_load = self.results['hourly_grid_load'][:len(hours)]
+        # 解析时间段
+        try:
+            start_date = datetime.strptime(self.result_start_date_var.get(), "%Y-%m-%d")
+            end_date = datetime.strptime(self.result_end_date_var.get(), "%Y-%m-%d")
+        except ValueError:
+            messagebox.showerror("错误", "日期格式不正确，请使用 YYYY-MM-DD 格式")
+            return
+        
+        # 计算时间段对应的小时索引
+        start_hour = self.date_to_hour(start_date)
+        end_hour = self.date_to_hour(end_date)
+        
+        if start_hour > end_hour:
+            messagebox.showerror("错误", "开始日期不能晚于结束日期")
+            return
+        
+        if start_hour < 0 or end_hour >= 8760:
+            messagebox.showerror("错误", "日期超出范围，应在2025-01-01至2025-12-31之间")
+            return
+        
+        # 获取时间段内的数据
+        hours = list(range(start_hour, end_hour + 1))
+        total_load = [self.results['hourly_total_load'][i] for i in hours]
+        generation = [self.results['hourly_generation'][i] for i in hours]
+        grid_load = [self.results['hourly_grid_load'][i] for i in hours]
         
         # 处理可能缺失的新字段
-        pv_output = self.results.get('hourly_pv_output', [0.0] * 8760)[:len(hours)]
-        wind_output = self.results.get('hourly_wind_output', [0.0] * 8760)[:len(hours)]
-        chp_output = self.results.get('hourly_chp_output', [0.0] * 8760)[:len(hours)]
+        pv_output = [self.results.get('hourly_pv_output', [0.0] * 8760)[i] for i in hours]
+        wind_output = [self.results.get('hourly_wind_output', [0.0] * 8760)[i] for i in hours]
+        chp_output = [self.results.get('hourly_chp_output', [0.0] * 8760)[i] for i in hours]
         # 修复 KeyError: 'hourly_peak_pending_output'
-        peak_pending_output = self.results.get('hourly_peak_pending_output', [0.0] * 8760)[:len(hours)]
-        peak_output = self.results.get('hourly_peak_output', [0.0] * 8760)[:len(hours)]
+        peak_pending_output = [self.results.get('hourly_peak_pending_output', [0.0] * 8760)[i] for i in hours]
+        peak_output = [self.results.get('hourly_peak_output', [0.0] * 8760)[i] for i in hours]
         
         # 绘制各类出力组成
-        self.ax.plot(hours, total_load, label='总负荷', linewidth=2, color='blue')
-        self.ax.plot(hours, generation, label='总出力', linewidth=2, color='green')
-        self.ax.plot(hours, grid_load, label='下网负荷', linewidth=1, color='red')
-        self.ax.fill_between(hours, [0]*len(hours), pv_output, label='光伏出力', alpha=0.3, color='orange')
-        self.ax.fill_between(hours, [0]*len(hours), wind_output, label='风机出力', alpha=0.3, color='purple')
-        self.ax.fill_between(hours, [0]*len(hours), chp_output, label='热电联产出力', alpha=0.3, color='brown')
-        self.ax.fill_between(hours, [0]*len(hours), peak_output, label='调峰机组出力', alpha=0.3, color='cyan')
+        line_total_load, = self.ax.plot(hours, total_load, label='总负荷', linewidth=0.5, color='blue')
+        line_generation, = self.ax.plot(hours, generation, label='总出力', linewidth=0.5, color='green')
+        line_grid_load, = self.ax.plot(hours, grid_load, label='下网负荷', linewidth=0.5, color='red')
+        fill_pv = self.ax.fill_between(hours, [0]*len(hours), pv_output, label='光伏出力', alpha=0.3, color='orange')
+        fill_wind = self.ax.fill_between(hours, [0]*len(hours), wind_output, label='风机出力', alpha=0.3, color='purple')
+        fill_chp = self.ax.fill_between(hours, [0]*len(hours), chp_output, label='热电联产出力', alpha=0.3, color='brown')
+        fill_peak = self.ax.fill_between(hours, [0]*len(hours), peak_output, label='调峰机组出力', alpha=0.3, color='cyan')
         
         self.ax.set_xlabel('小时')
         self.ax.set_ylabel('功率 (kW)')
-        self.ax.set_title('能源供需趋势 (前168小时)')
-        self.ax.legend()
+        self.ax.set_title(f'能源供需趋势 ({self.result_start_date_var.get()} 至 {self.result_end_date_var.get()})')
+        
+        # 创建图例并启用点击功能
+        legend = self.ax.legend()
+        
+        # 启用图例点击交互
+        lines = [line_total_load, line_generation, line_grid_load]
+        fills = [fill_pv, fill_wind, fill_chp, fill_peak]
+        
+        # 为线条图例启用点击
+        lined = {}
+        for legline, origline in zip(legend.get_lines(), lines):
+            legline.set_picker(True)  # Enable picking on the legend line
+            lined[legline] = origline
+        
+        # 为填充图例启用点击
+        for legline, origfill in zip(legend.get_patches(), fills):
+            legline.set_picker(True)  # Enable picking on the legend patch
+            lined[legline] = origfill
+        
+        # 为图例中的文本也启用点击
+        for i, (legtext, origline) in enumerate(zip(legend.get_texts(), lines + [fill_pv, fill_wind, fill_chp, fill_peak])):
+            legtext.set_picker(True)  # Enable picking on the legend text
+            lined[legtext] = origline
+        
+        # 保存线条和图例映射关系
+        self.lined_result = lined
+        
+        # 连接点击事件
+        self.canvas.mpl_connect('pick_event', self.on_legend_click_result)
+        
         self.ax.grid(True, alpha=0.3)
+        
+        # 设置x轴范围
+        self.ax.set_xlim(start_hour, end_hour)
         
         # 刷新画布
         self.canvas.draw()
@@ -3921,6 +4083,160 @@ class EnergyBalanceApp:
         
         ttk.Button(button_frame, text="确定", command=confirm).pack(side=tk.LEFT, padx=5)
         ttk.Button(button_frame, text="取消", command=dialog.destroy).pack(side=tk.LEFT, padx=5)
+
+    def date_to_hour(self, date):
+        """
+        将日期转换为一年中对应的小时数
+        假设数据是从2025年1月1日0时开始的
+        """
+        start_of_year = datetime(2025, 1, 1)
+        delta = date - start_of_year
+        return int(delta.total_seconds() // 3600)
+    
+    def on_legend_click_data(self, event):
+        """
+        处理数据图表图例点击事件，显示/隐藏对应的曲线
+        """
+        # 获取被点击的图例元素
+        legitem = event.artist
+        
+        # 获取对应的原始线条
+        origline = self.lined_data[legitem]
+        
+        # 切换线条的可见性
+        vis = not origline.get_visible()
+        origline.set_visible(vis)
+        
+        # 更新所有相关的图例元素的透明度
+        legend = self.data_ax.get_legend()
+        if legend:
+            for legline, origline_ref in self.lined_data.items():
+                if origline_ref == origline:
+                    if vis:
+                        legline.set_alpha(1.0)
+                    else:
+                        legline.set_alpha(0.2)
+        
+        # 自适应调整y轴范围
+        self.auto_adjust_y_axis_data()
+        
+        # 刷新画布
+        self.data_canvas.draw()
+
+    def on_legend_click_result(self, event):
+        """
+        处理结果图表图例点击事件，显示/隐藏对应的曲线
+        """
+        # 获取被点击的图例元素
+        legitem = event.artist
+        
+        # 获取对应的原始线条或填充
+        origline = self.lined_result[legitem]
+        
+        # 切换线条或填充的可见性
+        vis = not origline.get_visible()
+        origline.set_visible(vis)
+        
+        # 更新所有相关的图例元素的透明度
+        legend = self.ax.get_legend()
+        if legend:
+            for legline, origline_ref in self.lined_result.items():
+                if origline_ref == origline:
+                    if vis:
+                        legline.set_alpha(1.0)
+                    else:
+                        legline.set_alpha(0.2)
+        
+        # 自适应调整y轴范围
+        self.auto_adjust_y_axis_result()
+        
+        # 刷新画布
+        self.canvas.draw()
+
+    def auto_adjust_y_axis_data(self):
+        """
+        自动调整数据图表的y轴范围，基于当前可见的线条
+        """
+        # 找到所有可见的线条
+        visible_lines = []
+        for line in self.data_ax.get_lines():
+            if line.get_visible():
+                visible_lines.append(line)
+        
+        if not visible_lines:
+            # 如果没有可见线条，设置默认范围
+            self.data_ax.set_ylim(0, 1)
+            return
+        
+        # 计算所有可见线条的y值范围
+        all_y_values = []
+        for line in visible_lines:
+            y_data = line.get_ydata()
+            all_y_values.extend(y_data)
+        
+        if all_y_values:
+            y_min = min(all_y_values)
+            y_max = max(all_y_values)
+            
+            # 添加一些边距
+            margin = (y_max - y_min) * 0.05 if y_max != y_min else 0.1
+            y_min -= margin
+            y_max += margin
+            
+            self.data_ax.set_ylim(y_min, y_max)
+
+    def auto_adjust_y_axis_result(self):
+        """
+        自动调整结果图表的y轴范围，基于当前可见的线条
+        """
+        # 找到所有可见的线条和填充区域
+        visible_lines = []
+        for line in self.ax.get_lines():
+            if line.get_visible():
+                visible_lines.append(line)
+        
+        # 也检查填充区域（fill_between的结果）
+        for patch in self.ax.collections:  # fill_between创建的是collections
+            if hasattr(patch, 'get_visible') and patch.get_visible():
+                visible_lines.append(patch)
+        
+        if not visible_lines:
+            # 如果没有可见线条，设置默认范围
+            self.ax.set_ylim(0, 1)
+            return
+        
+        # 计算所有可见线条的y值范围
+        all_y_values = []
+        for line in visible_lines:
+            if hasattr(line, 'get_ydata'):  # 普通线条
+                y_data = line.get_ydata()
+                all_y_values.extend(y_data)
+            elif hasattr(line, 'get_paths'):  # 填充区域
+                paths = line.get_paths()
+                for path in paths:
+                    vertices = path.vertices
+                    y_vals = [v[1] for v in vertices]
+                    all_y_values.extend(y_vals)
+        
+        if all_y_values:
+            y_min = min(all_y_values)
+            y_max = max(all_y_values)
+            
+            # 添加一些边距
+            margin = (y_max - y_min) * 0.05 if y_max != y_min else 0.1
+            y_min -= margin
+            y_max += margin
+            
+            self.ax.set_ylim(y_min, y_max)
+    
+    def on_mouse_wheel_data(self, event):
+        """
+        处理数据区域的鼠标滚轮事件
+        """
+        if event.delta > 0:
+            self.data_canvas.yview_scroll(-1, "units")
+        else:
+            self.data_canvas.yview_scroll(1, "units")
 
 def main():
     root = tk.Tk()
