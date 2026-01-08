@@ -6,6 +6,7 @@ import numpy as np
 import csv
 import json
 import os
+import sys
 from datetime import datetime
 
 # 尝试导入openpyxl用于Excel导出1
@@ -841,7 +842,14 @@ class EnergyBalanceApp:
         self.root.bind('<Escape>', self.exit_fullscreen)  # 绑定ESC键退出全屏
         
         # 初始化项目管理器
-        self.app_path = os.path.dirname(os.path.abspath(__file__))
+        # 检查是否在打包环境中运行
+        if getattr(sys, 'frozen', False):
+            # 如果是打包后的可执行文件，使用可执行文件所在目录
+            self.app_path = os.path.dirname(sys.executable)
+        else:
+            # 如果是直接运行Python脚本，使用脚本所在目录
+            self.app_path = os.path.dirname(os.path.abspath(__file__))
+        
         self.project_manager = ProjectManager(self.app_path)
         self.current_project = None
         
@@ -1793,6 +1801,9 @@ class EnergyBalanceApp:
         # 显示成功消息
         messagebox.showinfo("成功", f"风机型号 '{name}' 已保存！")
         
+        # 自动保存当前项目以确保修改被持久化
+        self.save_current_project()
+        
     def save_pv_model(self):
         """
         保存当前编辑的光伏型号
@@ -1866,6 +1877,9 @@ class EnergyBalanceApp:
         
         # 显示成功消息
         messagebox.showinfo("成功", f"光伏型号 '{name}' 已保存！")
+        
+        # 自动保存当前项目以确保修改被持久化
+        self.save_current_project()
         
     def add_wind_model(self):
         """
@@ -2341,6 +2355,9 @@ class EnergyBalanceApp:
             self.wind_model_rated_power.set(model['params']['rated_power'])
             self.wind_model_count.set(model['count'])
             
+            # 设置出力修正系数
+            self.wind_model_correction_factor.set(model.get('output_correction_factor', 1.0))
+            
             # 绘制当前选中风机型号的函数曲线
             self.plot_single_wind_curve(model)
     
@@ -2397,6 +2414,9 @@ class EnergyBalanceApp:
             # 更新界面显示
             self.on_pv_method_change()
             
+            # 设置出力修正系数
+            self.pv_model_correction_factor.set(model.get('output_correction_factor', 1.0))
+            
             # 绘制当前选中光伏型号的函数曲线
             self.plot_single_pv_curve(model)
     
@@ -2451,7 +2471,8 @@ class EnergyBalanceApp:
                 'cut_out_wind': 25.0,
                 'rated_power': 2000.0
             },
-            'count': 1
+            'count': 1,
+            'output_correction_factor': 1.0  # 添加出力修正系数，默认为1.0
         }
         
         # 添加到数据模型
@@ -2484,7 +2505,8 @@ class EnergyBalanceApp:
                 'panel_efficiency': 0.2,
                 'panel_area': 1000.0
             },
-            'count': 10
+            'count': 10,
+            'output_correction_factor': 1.0  # 添加出力修正系数，默认为1.0
         }
         
         # 添加到数据模型
