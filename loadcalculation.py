@@ -186,7 +186,8 @@ class EnergyDataModel:
         }
         
         # 新增调峰机组最小出力参数
-        self.peak_power_min = 0.0
+        self.peak_power_min_summer = 0.0  # 夏季最小出力
+        self.peak_power_min_winter = 0.0  # 冬季最小出力
         self.peak_power_max = 2000.0
         
         # 最大电力负荷参数
@@ -255,7 +256,8 @@ class EnergyDataModel:
             'wind_turbine_models': self.wind_turbine_models,
             'pv_models': self.pv_models,
             'chp_electric_params': self.chp_electric_params,
-            'peak_power_min': self.peak_power_min,
+            'peak_power_min_summer': self.peak_power_min_summer,
+            'peak_power_min_winter': self.peak_power_min_winter,
             'peak_power_max': self.peak_power_max,
             'max_electric_load': self.max_electric_load,
             'maintenance_schedules': self.maintenance_schedules,
@@ -307,7 +309,8 @@ class EnergyDataModel:
             'electric_heat_ratio': 0.5,
             'base_electric': 100.0
         })
-        self.peak_power_min = data.get('peak_power_min', 0.0)
+        self.peak_power_min_summer = data.get('peak_power_min_summer', 0.0)  # 夏季最小出力
+        self.peak_power_min_winter = data.get('peak_power_min_winter', 0.0)  # 冬季最小出力
         self.peak_power_max = data.get('peak_power_max', 2000.0)
         self.max_electric_load = data.get('max_electric_load', 5000.0)
         
@@ -590,7 +593,8 @@ class AnnualBalanceCalculator:
         
         # 保存原始参数用于检修修正计算
         original_peak_power_max = self.data_model.peak_power_max
-        original_peak_power_min = self.data_model.peak_power_min
+        original_peak_power_min_summer = self.data_model.peak_power_min_summer  # 夏季最小出力
+        original_peak_power_min_winter = self.data_model.peak_power_min_winter  # 冬季最小出力
         original_electric_load = list(self.data_model.electric_load_hourly)  # 复制一份
         
         for hour in range(8760):
@@ -600,7 +604,18 @@ class AnnualBalanceCalculator:
             
             # 初始化当前小时的参数
             current_peak_power_max = original_peak_power_max
-            current_peak_power_min = original_peak_power_min
+            
+            # 根据月份确定当前应该使用的最小出力
+            from datetime import datetime, timedelta
+            base_date = datetime(2024, 1, 1)
+            current_date = base_date + timedelta(hours=hour)
+            current_month = current_date.month
+            
+            if 5 <= current_month <= 9:  # 夏季：5-9月
+                current_peak_power_min = original_peak_power_min_summer
+            else:  # 冬季：10-12月和1-4月
+                current_peak_power_min = original_peak_power_min_winter
+                
             current_electric_load = original_electric_load[hour]
             current_max_load = max(original_electric_load) if original_electric_load else 1.0  # 防止除零错误
             
@@ -614,12 +629,16 @@ class AnnualBalanceCalculator:
                     current_peak_power_max = current_peak_power_max - power_size
                     # 新最小负荷 = 原最小负荷 * （新最大负荷/原最大负荷）
                     if original_peak_power_max > 0:
-                        current_peak_power_min = current_peak_power_min * (current_peak_power_max / original_peak_power_max)
+                        # 分别调整夏季和冬季最小出力
+                        if 5 <= current_date.month <= 9:  # 夏季
+                            current_peak_power_min = original_peak_power_min_summer * (current_peak_power_max / original_peak_power_max)
+                        else:  # 冬季
+                            current_peak_power_min = original_peak_power_min_winter * (current_peak_power_max / original_peak_power_max)
                         
                 elif power_type == '用电负荷':
-                    # 新电力负荷 = 原电力负荷 / 最大电力负荷 * （原电力负荷 - 影响负荷出力大小）
+                    # 新电力负荷 = 原电力负荷 / 最大电力负荷 * （最大电力负荷 - 影响负荷出力大小）
                     if current_max_load > 0:
-                        current_electric_load = current_electric_load / current_max_load * (current_electric_load - power_size)
+                        current_electric_load = current_electric_load / current_max_load * (current_max_load - power_size)
             
             # 应用投产计划修正（线性变化）
             for schedule in active_commissioning_schedules:
@@ -650,19 +669,38 @@ class AnnualBalanceCalculator:
                     adjusted_power_size = power_size * interpolation_factor
                     current_peak_power_max = current_peak_power_max - (power_size - adjusted_power_size)
                     
+                elif power_type == '调峰机组夏季最小出力':
+                    # 在投产开始日期前，修正的调峰机组夏季最小负荷为原调峰机组夏季最小负荷
+                    # 在投产结束日后，修正的调峰机组夏季最小负荷即为原调峰机组夏季最小负荷减去设置的影响出力负荷大小
+                    # 在投产期间，采用线性变化。即最小负荷随着投产进行逐步减小
+                    adjusted_power_size = power_size * interpolation_factor
+                    if 5 <= current_date.month <= 9:  # 夏季：5-9月
+                        current_peak_power_min = original_peak_power_min_summer - adjusted_power_size
+                elif power_type == '调峰机组冬季最小出力':
+                    # 在投产开始日期前，修正的调峰机组冬季最小负荷为原调峰机组冬季最小负荷
+                    # 在投产结束日后，修正的调峰机组冬季最小负荷即为原调峰机组冬季最小负荷减去设置的影响出力负荷大小
+                    # 在投产期间，采用线性变化。即最小负荷随着投产进行逐步减小
+                    adjusted_power_size = power_size * interpolation_factor
+                    if current_date.month < 5 or current_date.month > 9:  # 冬季：10-12月和1-4月
+                        current_peak_power_min = original_peak_power_min_winter - adjusted_power_size
                 elif power_type == '调峰机组最小出力':
+                    # 为了向后兼容，仍然支持原有的调峰机组最小出力设置
                     # 在投产开始日期前，修正的调峰机组最小负荷为原调峰机组最小负荷
                     # 在投产结束日后，修正的调峰机组最小负荷即为原调峰机组最小负荷减去设置的影响出力负荷大小
                     # 在投产期间，采用线性变化。即最小负荷随着投产进行逐步减小
                     adjusted_power_size = power_size * interpolation_factor
-                    current_peak_power_min = current_peak_power_min - adjusted_power_size
+                    if 5 <= current_date.month <= 9:  # 夏季
+                        current_peak_power_min = original_peak_power_min_summer - adjusted_power_size
+                    else:  # 冬季
+                        current_peak_power_min = original_peak_power_min_winter - adjusted_power_size
                     
                 elif power_type == '用电负荷':
-                    # 在投产开始日期前，修正的电力负荷为原电力负荷减去设置的影响出力负荷大小
+                    # 在投产开始日期前，修正的电力负荷为原电力负荷乘以（最大电力负荷-影响负荷出力大小）/最大电力负荷
                     # 在投产结束日后，修正的电力负荷即为原电力负荷
                     # 在投产期间，采用线性变化
                     adjusted_power_size = power_size * interpolation_factor
-                    current_electric_load = current_electric_load - (power_size - adjusted_power_size)
+                    if current_max_load > 0:
+                        current_electric_load = current_electric_load / current_max_load * (current_max_load - power_size + adjusted_power_size)
             
             # 保存修正后的电力负荷，以便在输出中显示
             results['hourly_corrected_electric_load'][hour] = current_electric_load
@@ -801,7 +839,7 @@ class AnnualBalanceCalculator:
                     # 已收敛，跳出迭代循环
                     break
             
-            # 9) 风机光伏放弃出力 = max（调峰机组最小出力 - 调峰机组待定出力，0）
+            # 9) 风机光伏放弃出力 = max（当前月份对应的调峰机组最小出力 - 调峰机组待定出力，0）
             wind_pv_abandon = max(current_peak_power_min - peak_pending_output, 0)
             
             # 10) 风机光伏实际出力 = （光伏最大出力+风机最大出力）- 风机光伏放弃出力
@@ -1609,9 +1647,13 @@ class EnergyBalanceApp:
         self.peak_power_max = tk.DoubleVar(value=self.data_model.peak_power_max)
         ttk.Entry(peak_frame, textvariable=self.peak_power_max, width=20).grid(row=0, column=1, pady=2)
         
-        ttk.Label(peak_frame, text="调峰机组最小出力 (kW):").grid(row=1, column=0, sticky=tk.W, pady=2)
-        self.peak_power_min = tk.DoubleVar(value=self.data_model.peak_power_min)
-        ttk.Entry(peak_frame, textvariable=self.peak_power_min, width=20).grid(row=1, column=1, pady=2)
+        ttk.Label(peak_frame, text="调峰机组夏季最小出力 (kW):").grid(row=1, column=0, sticky=tk.W, pady=2)
+        self.peak_power_min_summer = tk.DoubleVar(value=self.data_model.peak_power_min_summer)
+        ttk.Entry(peak_frame, textvariable=self.peak_power_min_summer, width=20).grid(row=1, column=1, pady=2)
+        
+        ttk.Label(peak_frame, text="调峰机组冬季最小出力 (kW):").grid(row=2, column=0, sticky=tk.W, pady=2)
+        self.peak_power_min_winter = tk.DoubleVar(value=self.data_model.peak_power_min_winter)
+        ttk.Entry(peak_frame, textvariable=self.peak_power_min_winter, width=20).grid(row=2, column=1, pady=2)
         
         # 配置权重
         tab.columnconfigure(0, weight=1)
@@ -2078,7 +2120,8 @@ class EnergyBalanceApp:
             
             # 保存调峰机组参数
             self.data_model.peak_power_max = self.peak_power_max.get()
-            self.data_model.peak_power_min = self.peak_power_min.get()
+            self.data_model.peak_power_min_summer = self.peak_power_min_summer.get()
+            self.data_model.peak_power_min_winter = self.peak_power_min_winter.get()
             
             # 保存负荷设置
             self.data_model.max_electric_load = self.max_load_var.get()
@@ -3701,7 +3744,7 @@ class EnergyBalanceApp:
         if schedule_type == "maintenance":
             power_type_combo['values'] = ("光伏出力", "风机出力", "调峰机组出力", "用电负荷")
         else:  # commissioning
-            power_type_combo['values'] = ("光伏出力", "风机出力", "调峰机组最大出力", "调峰机组最小出力", "用电负荷")
+            power_type_combo['values'] = ("光伏出力", "风机出力", "调峰机组最大出力", "调峰机组夏季最小出力", "调峰机组冬季最小出力", "调峰机组最小出力", "用电负荷")
         power_type_combo.grid(row=1, column=1, pady=5, padx=5, sticky=tk.W)
         
         # 影响负荷出力大小
