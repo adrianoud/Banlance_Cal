@@ -619,7 +619,11 @@ class AnnualBalanceCalculator:
             current_electric_load = original_electric_load[hour]
             current_max_load = max(original_electric_load) if original_electric_load else 1.0  # 防止除零错误
             
-            # 应用检修计划修正
+            # 计算检修计划和投运计划对用电负荷的总影响
+            maintenance_load_reduction = 0.0  # 检修计划对用电负荷的减少量
+            commissioning_load_reduction = 0.0  # 投运计划对用电负荷的减少量（开始前）或增加量（结束后）
+            
+            # 收集检修计划对用电负荷的影响
             for schedule in active_maintenance_schedules:
                 power_type = schedule.get('power_type', '')
                 power_size = schedule.get('power_size', 0.0)
@@ -636,11 +640,9 @@ class AnnualBalanceCalculator:
                             current_peak_power_min = original_peak_power_min_winter * (current_peak_power_max / original_peak_power_max)
                         
                 elif power_type == '用电负荷':
-                    # 新电力负荷 = 原电力负荷 / 最大电力负荷 * （最大电力负荷 - 影响负荷出力大小）
-                    if current_max_load > 0:
-                        current_electric_load = current_electric_load / current_max_load * (current_max_load - power_size)
+                    maintenance_load_reduction += power_size
             
-            # 应用投产计划修正（线性变化）
+            # 收集投运计划对用电负荷的影响（线性变化）
             for schedule in active_commissioning_schedules:
                 power_type = schedule.get('power_type', '')
                 power_size = schedule.get('power_size', 0.0)
@@ -695,12 +697,14 @@ class AnnualBalanceCalculator:
                         current_peak_power_min = original_peak_power_min_winter - adjusted_power_size
                     
                 elif power_type == '用电负荷':
-                    # 在投产开始日期前，修正的电力负荷为原电力负荷乘以（最大电力负荷-影响负荷出力大小）/最大电力负荷
-                    # 在投产结束日后，修正的电力负荷即为原电力负荷
-                    # 在投产期间，采用线性变化
-                    adjusted_power_size = power_size * interpolation_factor
-                    if current_max_load > 0:
-                        current_electric_load = current_electric_load / current_max_load * (current_max_load - power_size + adjusted_power_size)
+                    # 投运计划对用电负荷的影响是渐变的：开始前是全部影响，结束后是无影响，中间线性变化
+                    adjusted_power_size = power_size * (1 - interpolation_factor)  # 1-interpolation_factor 表示剩余影响
+                    commissioning_load_reduction += adjusted_power_size
+            
+            # 应用检修计划和投运计划对用电负荷的综合影响
+            # 用电负荷 = 原始用电负荷 / 最大电力负荷 * (最大电力负荷 - 检修影响 - 投运影响)
+            if current_max_load > 0:
+                current_electric_load = current_electric_load / current_max_load * (current_max_load - maintenance_load_reduction - commissioning_load_reduction)
             
             # 保存修正后的电力负荷，以便在输出中显示
             results['hourly_corrected_electric_load'][hour] = current_electric_load
