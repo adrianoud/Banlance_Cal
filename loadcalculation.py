@@ -965,6 +965,7 @@ class EnergyBalanceApp:
         
         ttk.Button(btn_frame, text="打开项目", command=self.open_selected_project).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="删除项目", command=self.delete_selected_project).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="复制项目", command=self.copy_selected_project).pack(side=tk.LEFT, padx=5)
         
         # 配置网格权重
         projects_frame.columnconfigure(0, weight=1)
@@ -988,6 +989,89 @@ class EnergyBalanceApp:
             modified_time = datetime.fromisoformat(project['modified_time']).strftime('%Y-%m-%d %H:%M')
             self.projects_tree.insert('', tk.END, values=(project['name'], created_time, modified_time),
                                      tags=(project['id'],))
+        
+        # 绑定双击事件到项目名称列，用于编辑项目名称
+        self.projects_tree.bind('<Double-1>', self.on_project_name_double_click)
+        
+    def on_project_name_double_click(self, event):
+        """
+        处理项目名称列双击事件，用于编辑项目名称
+        """
+        # 获取被点击的项目行
+        item = self.projects_tree.identify_row(event.y)
+        column = self.projects_tree.identify_column(event.x)
+        
+        # 只有在双击项目名称列时才执行编辑
+        if item and column == '#1':  # 第一列是项目名称列
+            # 获取项目信息
+            item_values = self.projects_tree.item(item, 'values')
+            project_id = self.projects_tree.item(item, 'tags')[0]
+            project_name = item_values[0]
+            
+            # 执行编辑项目名称
+            self.edit_project_name(item, project_id, project_name)
+        
+    def edit_project_name(self, item, project_id, current_name):
+        """
+        编辑项目名称
+        """
+        # 创建Entry控件用于编辑
+        entry = ttk.Entry(self.projects_tree)
+        entry.insert(0, current_name)
+        entry.select_range(0, tk.END)
+        entry.focus()
+        
+        # 获取项目名称列的位置
+        bbox = self.projects_tree.bbox(item, '#1')
+        if bbox:
+            x, y, width, height = bbox
+            entry.place(x=x, y=y, width=width)
+        
+        def save_name():
+            new_name = entry.get().strip()
+            entry.destroy()
+            
+            if new_name and new_name != current_name:
+                # 检查新名称是否与其他项目重名
+                all_projects = self.project_manager.get_project_list()
+                for proj in all_projects:
+                    if proj['name'] == new_name and proj['id'] != project_id:
+                        messagebox.showwarning("警告", f"项目名称 '{new_name}' 已存在，请选择其他名称！")
+                        return
+                
+                # 更新项目信息
+                try:
+                    # 加载项目信息文件
+                    project_info_path = os.path.join(self.project_manager.projects_dir, project_id, "project_info.json")
+                    if os.path.exists(project_info_path):
+                        with open(project_info_path, 'r', encoding='utf-8') as f:
+                            project_info = json.load(f)
+                        
+                        # 更新项目名称
+                        project_info['name'] = new_name
+                        
+                        # 保存项目信息文件
+                        with open(project_info_path, 'w', encoding='utf-8') as f:
+                            json.dump(project_info, f, ensure_ascii=False, indent=2)
+                        
+                        # 更新Treeview显示
+                        values = list(self.projects_tree.item(item, 'values'))
+                        values[0] = new_name
+                        self.projects_tree.item(item, values=values)
+                        
+                        messagebox.showinfo("成功", "项目名称已更新！")
+                    else:
+                        messagebox.showerror("错误", "项目信息文件不存在！")
+                except Exception as e:
+                    messagebox.showerror("错误", f"更新项目名称时发生错误:\n{str(e)}")
+            
+        def cancel_edit():
+            entry.destroy()
+        
+        # 绑定回车键和失去焦点事件
+        entry.bind('<Return>', lambda e: save_name())
+        entry.bind('<FocusOut>', lambda e: save_name())  # 当Entry失去焦点时也保存
+        entry.bind('<Escape>', lambda e: cancel_edit())
         
     def create_new_project(self):
         """创建新项目"""
@@ -1081,6 +1165,73 @@ class EnergyBalanceApp:
                     messagebox.showerror("错误", "删除项目失败！项目可能不存在。")
             except Exception as e:
                 messagebox.showerror("错误", f"删除项目时发生异常:\n{str(e)}")
+                
+    def copy_selected_project(self):
+        """复制选中的项目"""
+        selection = self.projects_tree.selection()
+        if not selection:
+            messagebox.showwarning("警告", "请先选择一个项目！")
+            return
+        
+        # 获取选中项目的信息
+        item = self.projects_tree.item(selection[0])
+        original_project_name = item['values'][0]
+        original_project_id = self.projects_tree.item(selection[0], 'tags')[0]
+        
+        # 弹出对话框输入新项目名称
+        dialog = tk.Toplevel(self.root)
+        dialog.title("复制项目")
+        dialog.geometry("300x150")
+        dialog.transient(self.root)
+        dialog.grab_set()
+        
+        ttk.Label(dialog, text=f"复制项目: {original_project_name}\n请输入新项目名称:").pack(pady=10)
+        name_var = tk.StringVar(value=f"{original_project_name}_副本")
+        name_entry = ttk.Entry(dialog, textvariable=name_var, width=30)
+        name_entry.pack(pady=5)
+        name_entry.focus()
+        
+        def confirm():
+            new_name = name_var.get().strip()
+            if not new_name:
+                messagebox.showwarning("警告", "请输入新项目名称！")
+                return
+            
+            # 检查新项目名称是否已存在
+            projects = self.project_manager.get_project_list()
+            if any(p['name'] == new_name for p in projects):
+                messagebox.showwarning("警告", f"项目名称 '{new_name}' 已存在，请选择其他名称！")
+                return
+            
+            # 复制项目
+            try:
+                # 加载原项目数据
+                original_data = self.project_manager.load_project_data(original_project_id)
+                if original_data is not None:
+                    # 创建新项目
+                    new_project = self.project_manager.create_project(new_name)
+                    # 保存原数据到新项目
+                    self.project_manager.save_project_data(new_project['id'], original_data)
+                    
+                    messagebox.showinfo("成功", f"项目 '{original_project_name}' 已复制为 '{new_name}'！")
+                    # 刷新项目列表
+                    self.load_project_list()
+                else:
+                    messagebox.showerror("错误", "原项目没有可复制的数据！")
+            except Exception as e:
+                messagebox.showerror("错误", f"复制项目时发生异常:\n{str(e)}")
+            
+            # 关闭对话框
+            dialog.destroy()
+        
+        button_frame = ttk.Frame(dialog)
+        button_frame.pack(pady=20)
+        
+        ttk.Button(button_frame, text="确定", command=confirm).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="取消", command=dialog.destroy).pack(side=tk.LEFT, padx=5)
+        
+        # 绑定回车键
+        name_entry.bind('<Return>', lambda e: confirm())
                 
     def enter_main_app(self):
         """进入主应用程序界面"""
