@@ -193,6 +193,10 @@ class EnergyDataModel:
         # 最大电力负荷参数
         self.max_electric_load = 5000.0
         
+        # 灵活负荷参数
+        self.flexible_load_max = 0.0  # 最大灵活负荷
+        self.flexible_load_min = 0.0  # 最小灵活负荷
+        
         # 检修和投产计划数据
         self.maintenance_schedules = []  # 检修计划列表
         self.commissioning_schedules = []  # 投产计划列表
@@ -260,6 +264,8 @@ class EnergyDataModel:
             'peak_power_min_winter': self.peak_power_min_winter,
             'peak_power_max': self.peak_power_max,
             'max_electric_load': self.max_electric_load,
+            'flexible_load_max': self.flexible_load_max,
+            'flexible_load_min': self.flexible_load_min,
             'maintenance_schedules': self.maintenance_schedules,
             'commissioning_schedules': self.commissioning_schedules,
             'output_limit_schedules': self.output_limit_schedules
@@ -313,6 +319,8 @@ class EnergyDataModel:
         self.peak_power_min_winter = data.get('peak_power_min_winter', 0.0)  # 冬季最小出力
         self.peak_power_max = data.get('peak_power_max', 2000.0)
         self.max_electric_load = data.get('max_electric_load', 5000.0)
+        self.flexible_load_max = data.get('flexible_load_max', 0.0)  # 最大灵活负荷
+        self.flexible_load_min = data.get('flexible_load_min', 0.0)  # 最小灵活负荷
         
         # 加载检修和投产计划数据
         self.maintenance_schedules = data.get('maintenance_schedules', [])
@@ -588,7 +596,8 @@ class AnnualBalanceCalculator:
             'hourly_wind_pv_actual': [0.0] * 8760,          # 风机光伏实际出力
             'hourly_grid_load': [0.0] * 8760,               # 下网负荷
             'hourly_abandon_rate': [0.0] * 8760,            # 弃光风率
-            'hourly_corrected_electric_load': [0.0] * 8760   # 修正后电力负荷
+            'hourly_corrected_electric_load': [0.0] * 8760,  # 修正后电力负荷
+            'hourly_flexible_load_consumption': [0.0] * 8760  # 灵活负荷消纳量
         }
         
         # 保存原始参数用于检修修正计算
@@ -846,19 +855,52 @@ class AnnualBalanceCalculator:
             # 9) 风机光伏放弃出力 = max（当前月份对应的调峰机组最小出力 - 调峰机组待定出力，0）
             wind_pv_abandon = max(current_peak_power_min - peak_pending_output, 0)
             
-            # 10) 风机光伏实际出力 = （光伏最大出力+风机最大出力）- 风机光伏放弃出力
-            wind_pv_actual = (pv_output + wind_output) - wind_pv_abandon
+            # 10) 应用灵活负荷消纳逻辑
+            # 2-1）当光伏及风力放弃出力小于最小灵活负荷时，灵活负荷不启动，不消纳；
+            # 2-2）当光伏及风力放弃出力大于等于最小灵活负荷时，小于等于最大灵活负荷时，所有放弃出力都被灵活负荷消纳。
+            # 2-3) 当光伏及风力放弃出力大于最大灵活负荷时，新消纳的出力等于最大灵活负荷，剩余部分出力继续放弃。
+            flexible_load_max = self.data_model.flexible_load_max
+            flexible_load_min = self.data_model.flexible_load_min
             
-            # 11) 总出力 = 光伏出力 + 风机出力 + 火电出力 - 风机光伏放弃出力
-            generation = pv_output + wind_output + thermal_output - wind_pv_abandon
+            if wind_pv_abandon >= flexible_load_min:
+                # 当放弃出力大于等于最小灵活负荷时，启动灵活负荷消纳
+                if wind_pv_abandon <= flexible_load_max:
+                    # 当放弃出力小于等于最大灵活负荷时，全部消纳
+                    actual_flexible_load = wind_pv_abandon
+                else:
+                    # 当放弃出力大于最大灵活负荷时，只消纳最大灵活负荷
+                    actual_flexible_load = flexible_load_max
+            else:
+                # 当放弃出力小于最小灵活负荷时，不启动灵活负荷
+                actual_flexible_load = 0.0
             
-            # 12) 弃光风率 = 风机光伏放弃出力 / (光伏最大出力 + 风机最大出力)
+            # 11) 修正计算结果中风机光伏放弃出力
+            # 新的风机光伏放弃出力 = 原风机光伏放弃出力 - 新增的灵活负荷消纳出力
+            corrected_wind_pv_abandon = max(wind_pv_abandon - actual_flexible_load, 0)  # 确保不为负数
+            
+            # 10) 新的光伏风电实际出力 = （光伏最大出力+风机最大出力）- 新的风机光伏放弃出力
+            wind_pv_actual = (pv_output + wind_output) - corrected_wind_pv_abandon
+            
+            # 11) 总出力 = 光伏出力 + 风机出力 + 火电出力 - 新的风机光伏放弃出力
+            generation = pv_output + wind_output + thermal_output - corrected_wind_pv_abandon
+            
+            # 12) 弃光风率 = 新的风机光伏放弃出力 / (光伏最大出力 + 风机最大出力)，避免除零错误
             abandon_rate = 0
             if (pv_output + wind_output) > 0:
-                abandon_rate = wind_pv_abandon / (pv_output + wind_output)
+                abandon_rate = corrected_wind_pv_abandon / (pv_output + wind_output)
+            else:
+                abandon_rate = 0
             
-            # 13) 下网负荷 = 总负荷 - 总出力
-            grid_load = total_load - generation
+            # 13) 修正下网负荷计算
+            # 下网负荷 = 总负荷 + 新增的灵活负荷消纳出力 - 总出力
+            grid_load = total_load + actual_flexible_load - generation
+            
+            # 记录灵活负荷消纳量
+            results['hourly_flexible_load_consumption'][hour] = actual_flexible_load
+            
+            # 存储修正后的风机光伏放弃出力和实际出力
+            results['hourly_wind_pv_abandon'][hour] = corrected_wind_pv_abandon
+            results['hourly_wind_pv_actual'][hour] = wind_pv_actual
             
             # 存储结果
             results['hourly_internal_electric_load'][hour] = internal_electric_load
@@ -1608,6 +1650,14 @@ class EnergyBalanceApp:
         self.max_load_var = tk.DoubleVar(value=self.data_model.max_electric_load)  # 使用数据模型中的值
         ttk.Entry(load_frame, textvariable=self.max_load_var, width=20).grid(row=0, column=1, pady=2)
         
+        ttk.Label(load_frame, text="最大灵活负荷 (kW):").grid(row=1, column=0, sticky=tk.W, pady=2)
+        self.flexible_load_max_var = tk.DoubleVar(value=self.data_model.flexible_load_max)  # 使用数据模型中的值
+        ttk.Entry(load_frame, textvariable=self.flexible_load_max_var, width=20).grid(row=1, column=1, pady=2)
+        
+        ttk.Label(load_frame, text="最小灵活负荷 (kW):").grid(row=2, column=0, sticky=tk.W, pady=2)
+        self.flexible_load_min_var = tk.DoubleVar(value=self.data_model.flexible_load_min)  # 使用数据模型中的值
+        ttk.Entry(load_frame, textvariable=self.flexible_load_min_var, width=20).grid(row=2, column=1, pady=2)
+        
         # 风机和光伏型号管理区域（放在同一行）
         models_frame = ttk.Frame(tab)
         models_frame.grid(row=2, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(0, 20))
@@ -2280,6 +2330,8 @@ class EnergyBalanceApp:
             
             # 保存负荷设置
             self.data_model.max_electric_load = self.max_load_var.get()
+            self.data_model.flexible_load_max = self.flexible_load_max_var.get()
+            self.data_model.flexible_load_min = self.flexible_load_min_var.get()
             
             # 显示成功消息
             messagebox.showinfo("成功", "所有函数参数已保存！")
@@ -3518,9 +3570,6 @@ class EnergyBalanceApp:
             # 累计下网电量（下网负荷相加）
             monthly_stats[month]['grid_load_sum'] += self.results['hourly_grid_load'][i]
             
-            # 累计弃风光量
-            monthly_stats[month]['abandon_sum'] += self.results['hourly_wind_pv_abandon'][i]
-            
             # 累计最大风光发电量
             pv_output = self.results['hourly_pv_output'][i]
             wind_output = self.results['hourly_wind_output'][i]
@@ -3532,8 +3581,14 @@ class EnergyBalanceApp:
             # 累计总用电量
             monthly_stats[month]['total_load_sum'] += self.results['hourly_total_load'][i]
             
-            # 累计弃电量
-            monthly_stats[month]['wind_pv_abandon_sum'] += self.results['hourly_wind_pv_abandon'][i]
+            # 累计弃电量（原弃电量 - 灵活负荷的消纳电量）
+            hourly_original_abandon = max(self.results['hourly_wind_pv_abandon'][i], 0)  # 确保为非负数
+            hourly_flexible_consumption = self.results['hourly_flexible_load_consumption'][i]
+            adjusted_hourly_abandon = max(hourly_original_abandon - hourly_flexible_consumption, 0)
+            monthly_stats[month]['wind_pv_abandon_sum'] += adjusted_hourly_abandon
+            
+            # 累计弃风光量（用于弃风光率计算，使用修正后的弃电量）
+            monthly_stats[month]['abandon_sum'] = monthly_stats[month]['wind_pv_abandon_sum']
             
             # 累计火电发电量
             monthly_stats[month]['thermal_sum'] += self.results['hourly_thermal_output'][i]
@@ -3541,8 +3596,10 @@ class EnergyBalanceApp:
             # 累计厂用电量
             monthly_stats[month]['internal_electric_sum'] += self.results['hourly_internal_electric_load'][i]
             
-            # 累计光伏风电消纳电量
-            monthly_stats[month]['wind_pv_actual_sum'] += self.results['hourly_wind_pv_actual'][i]
+            # 累计光伏风电消纳电量（原消纳电量 + 灵活负荷的消纳电量）
+            hourly_original_actual = (pv_output + wind_output) - hourly_original_abandon
+            hourly_adjusted_actual = hourly_original_actual + hourly_flexible_consumption
+            monthly_stats[month]['wind_pv_actual_sum'] += hourly_adjusted_actual
             
             # 累计负荷用电量（修正后电力负荷）
             monthly_stats[month]['corrected_electric_sum'] += self.results['hourly_corrected_electric_load'][i]
