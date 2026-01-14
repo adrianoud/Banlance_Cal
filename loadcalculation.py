@@ -3240,12 +3240,21 @@ class EnergyBalanceApp:
                 messagebox.showwarning("警告", "请先进行计算再导出结果！")
                 return
             
+            # 获取项目名称用于构建默认文件名
+            project_name = "未命名项目"
+            if self.current_project and 'name' in self.current_project:
+                project_name = self.current_project['name']
+            
+            # 清理项目名称，移除不适合作为文件名的字符
+            import re
+            clean_project_name = re.sub(r'[<>:"/\\|?*]', '_', project_name)
+            
             # 询问用户保存位置
             save_path = filedialog.asksaveasfilename(
                 title="保存计算结果",
                 defaultextension=".xlsx",
                 filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")],
-                initialfile="energy_calculation_results.xlsx"
+                initialfile=f"{clean_project_name}_计算结果.xlsx"
             )
             
             if not save_path:

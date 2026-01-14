@@ -9,6 +9,8 @@ a = Analysis(
     datas=[
         # 添加可能需要的数据文件
         ('data_template.csv', '.'),
+        # 添加项目目录，这样已有的项目数据会被包含
+        ('projects', 'projects'),
     ],
     hiddenimports=[
         'tkinter',
