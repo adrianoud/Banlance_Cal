@@ -9,7 +9,7 @@ import csv
 import json
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta  # 添加对timedelta的导入
 
 # 尝试导入openpyxl用于Excel导出1
 try:
@@ -89,7 +89,6 @@ class ProjectManager:
         """删除项目"""
         project_path = os.path.join(self.projects_dir, project_id)
         if os.path.exists(project_path):
-            import shutil
             shutil.rmtree(project_path)
             return True
         return False
@@ -559,7 +558,7 @@ class AnnualBalanceCalculator:
         :return: 活动的出力限制计划列表
         """
         # 计算日期 (假设从2024年1月1日开始)
-        from datetime import datetime, timedelta
+        from datetime import datetime
         base_date = datetime(2024, 1, 1)
         current_date = base_date + timedelta(hours=hour)
         current_date_str = current_date.strftime("%Y-%m-%d")
