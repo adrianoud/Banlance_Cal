@@ -3864,22 +3864,31 @@ class EnergyBalanceApp:
             return
             
         if messagebox.askyesno("确认删除", "确定要删除选中的检修计划条目吗？"):
-            # 获取要删除的条目信息
-            item = self.maintenance_tree.item(selection[0])
-            values = item['values']
+            # 使用更可靠的方法：首先获取UI树中的项目索引，然后从数据模型中删除相同索引的项目
+            all_items = self.maintenance_tree.get_children()
+            current_index = all_items.index(selection[0]) if selection[0] in all_items else -1
             
-            # 从数据模型中删除对应条目
-            if len(values) >= 3:  # 确保有足够的数据 (name, power_type, power_size)
-                name = values[0]  # 计划名称是第1个元素
-                power_size = float(values[2])  # 现在power_size是第3个元素（索引为2）
-                start_date = values[3]  # 开始日期是第4个元素
-                # 查找并删除匹配的条目
-                for i, sched in enumerate(self.data_model.maintenance_schedules):
-                    if (sched.get('name', '') == name and
-                        sched.get('power_size', 0) == power_size and 
-                        sched.get('start_date', '') == start_date):
-                        del self.data_model.maintenance_schedules[i]
-                        break
+            # 如果UI和数据模型保持同步，我们可以按索引删除
+            if current_index != -1 and current_index < len(self.data_model.maintenance_schedules):
+                del self.data_model.maintenance_schedules[current_index]
+            else:
+                # 如果索引无效，使用原来的方法
+                # 获取要删除的条目信息
+                item = self.maintenance_tree.item(selection[0])
+                values = item['values']
+                
+                # 从数据模型中删除对应条目
+                if len(values) >= 3:  # 确保有足够的数据 (name, power_type, power_size)
+                    name = values[0]  # 计划名称是第1个元素
+                    power_size = float(values[2])  # 现在power_size是第3个元素（索引为2）
+                    start_date = values[3]  # 开始日期是第4个元素
+                    # 查找并删除匹配的条目
+                    for i, sched in enumerate(self.data_model.maintenance_schedules):
+                        if (sched.get('name', '') == name and
+                            sched.get('power_size', 0) == power_size and 
+                            sched.get('start_date', '') == start_date):
+                            del self.data_model.maintenance_schedules[i]
+                            break
             
             # 从UI中删除条目
             self.maintenance_tree.delete(selection[0])
@@ -3918,17 +3927,26 @@ class EnergyBalanceApp:
             values = item['values']
             
             # 从数据模型中删除对应条目
-            if len(values) >= 3:  # 确保有足够的数据 (name, power_type, power_size)
-                name = values[0]  # 计划名称是第1个元素
-                power_size = float(values[2])  # 现在power_size是第3个元素（索引为2）
-                start_date = values[3]  # 开始日期是第4个元素
-                # 查找并删除匹配的条目
-                for i, sched in enumerate(self.data_model.commissioning_schedules):
-                    if (sched.get('name', '') == name and
-                        sched.get('power_size', 0) == power_size and 
-                        sched.get('start_date', '') == start_date):
-                        del self.data_model.commissioning_schedules[i]
-                        break
+            # 使用更可靠的方法：首先获取UI树中的项目索引，然后从数据模型中删除相同索引的项目
+            all_items = self.commissioning_tree.get_children()
+            current_index = all_items.index(selection[0]) if selection[0] in all_items else -1
+            
+            # 如果UI和数据模型保持同步，我们可以按索引删除
+            if current_index != -1 and current_index < len(self.data_model.commissioning_schedules):
+                del self.data_model.commissioning_schedules[current_index]
+            else:
+                # 如果索引无效，使用原来的方法
+                if len(values) >= 3:  # 确保有足够的数据 (name, power_type, power_size)
+                    name = values[0]  # 计划名称是第1个元素
+                    power_size = float(values[2])  # 现在power_size是第3个元素（索引为2）
+                    start_date = values[3]  # 开始日期是第4个元素
+                    # 查找并删除匹配的条目
+                    for i, sched in enumerate(self.data_model.commissioning_schedules):
+                        if (sched.get('name', '') == name and
+                            sched.get('power_size', 0) == power_size and 
+                            sched.get('start_date', '') == start_date):
+                            del self.data_model.commissioning_schedules[i]
+                            break
             
             # 从UI中删除条目
             self.commissioning_tree.delete(selection[0])
@@ -4079,49 +4097,57 @@ class EnergyBalanceApp:
                 
             if schedule_type == "maintenance":
                 if item_id:
-                    # 更新现有数据（需要找到对应的索引）
-                    item = tree.item(item_id)
-                    old_values = item['values']
-                    if len(old_values) >= 3:
-                        old_name = old_values[0]  # 计划名称是第1个元素
-                        old_power_size = float(old_values[2])  # power_size现在是第3个元素
-                        old_start_date = old_values[3]  # start_date现在是第4个元素
-                        # 查找并更新匹配的条目
-                        found = False
-                        for i, sched in enumerate(self.data_model.maintenance_schedules):
-                            if (sched.get('name', '') == old_name and
-                                sched.get('power_size', 0) == old_power_size and 
-                                sched.get('start_date', '') == old_start_date):
-                                self.data_model.maintenance_schedules[i] = schedule_data
-                                found = True
-                                break
-                        # 如果没找到匹配项，则添加新项
-                        if not found:
-                            self.data_model.maintenance_schedules.append(schedule_data)
+                    # 更新现有数据（使用UI Treeview中的索引）
+                    all_items = tree.get_children()
+                    current_index = all_items.index(item_id) if item_id in all_items else -1
+                    
+                    # 如果能确定索引，就按索引更新（假定UI和数据模型顺序一致）
+                    if current_index != -1 and current_index < len(self.data_model.maintenance_schedules):
+                        # 直接按索引更新，这是最可靠的方法
+                        self.data_model.maintenance_schedules[current_index] = schedule_data
+                    else:
+                        # 如果索引无效，尝试使用名称等字段匹配
+                        item = tree.item(item_id)
+                        old_values = item['values']
+                        if len(old_values) >= 3:
+                            old_name = old_values[0]  # 计划名称是第1个元素
+                            old_power_size = float(old_values[2])  # power_size现在是第3个元素
+                            old_start_date = old_values[3]  # start_date现在是第4个元素
+                            # 查找并更新匹配的条目
+                            for i, sched in enumerate(self.data_model.maintenance_schedules):
+                                if (sched.get('name', '') == old_name and
+                                    sched.get('power_size', 0) == old_power_size and 
+                                    sched.get('start_date', '') == old_start_date):
+                                    self.data_model.maintenance_schedules[i] = schedule_data
+                                    break
                 else:
                     # 添加新数据
                     self.data_model.maintenance_schedules.append(schedule_data)
             else:  # commissioning
                 if item_id:
-                    # 更新现有数据（需要找到对应的索引）
-                    item = tree.item(item_id)
-                    old_values = item['values']
-                    if len(old_values) >= 3:
-                        old_name = old_values[0]  # 计划名称是第1个元素
-                        old_power_size = float(old_values[2])  # power_size现在是第3个元素
-                        old_start_date = old_values[3]  # start_date现在是第4个元素
-                        # 查找并更新匹配的条目
-                        found = False
-                        for i, sched in enumerate(self.data_model.commissioning_schedules):
-                            if (sched.get('name', '') == old_name and
-                                sched.get('power_size', 0) == old_power_size and 
-                                sched.get('start_date', '') == old_start_date):
-                                self.data_model.commissioning_schedules[i] = schedule_data
-                                found = True
-                                break
-                        # 如果没找到匹配项，则添加新项
-                        if not found:
-                            self.data_model.commissioning_schedules.append(schedule_data)
+                    # 更新现有数据（使用UI Treeview中的索引）
+                    all_items = tree.get_children()
+                    current_index = all_items.index(item_id) if item_id in all_items else -1
+                    
+                    # 如果能确定索引，就按索引更新（假定UI和数据模型顺序一致）
+                    if current_index != -1 and current_index < len(self.data_model.commissioning_schedules):
+                        # 直接按索引更新，这是最可靠的方法
+                        self.data_model.commissioning_schedules[current_index] = schedule_data
+                    else:
+                        # 如果索引无效，尝试使用名称等字段匹配
+                        item = tree.item(item_id)
+                        old_values = item['values']
+                        if len(old_values) >= 3:
+                            old_name = old_values[0]  # 计划名称是第1个元素
+                            old_power_size = float(old_values[2])  # power_size现在是第3个元素
+                            old_start_date = old_values[3]  # start_date现在是第4个元素
+                            # 查找并更新匹配的条目
+                            for i, sched in enumerate(self.data_model.commissioning_schedules):
+                                if (sched.get('name', '') == old_name and
+                                    sched.get('power_size', 0) == old_power_size and 
+                                    sched.get('start_date', '') == old_start_date):
+                                    self.data_model.commissioning_schedules[i] = schedule_data
+                                    break
                 else:
                     # 添加新数据
                     self.data_model.commissioning_schedules.append(schedule_data)
@@ -4214,22 +4240,31 @@ class EnergyBalanceApp:
             return
             
         if messagebox.askyesno("确认删除", "确定要删除选中的出力限制计划条目吗？"):
-            # 获取要删除的条目信息
-            item = self.output_limit_tree.item(selection[0])
-            values = item['values']
+            # 使用更可靠的方法：首先获取UI树中的项目索引，然后从数据模型中删除相同索引的项目
+            all_items = self.output_limit_tree.get_children()
+            current_index = all_items.index(selection[0]) if selection[0] in all_items else -1
             
-            # 从数据模型中删除对应条目
-            if len(values) >= 3:  # 确保有足够的数据 (name, limit_type, power_size)
-                name = values[0]  # 计划名称是第1个元素
-                power_size = float(values[2])  # power_size是第3个元素（索引为2）
-                start_date = values[3]  # 开始日期是第4个元素
-                # 查找并删除匹配的条目
-                for i, sched in enumerate(self.data_model.output_limit_schedules):
-                    if (sched.get('name', '') == name and
-                        sched.get('power_size', 0) == power_size and 
-                        sched.get('start_date', '') == start_date):
-                        del self.data_model.output_limit_schedules[i]
-                        break
+            # 如果UI和数据模型保持同步，我们可以按索引删除
+            if current_index != -1 and current_index < len(self.data_model.output_limit_schedules):
+                del self.data_model.output_limit_schedules[current_index]
+            else:
+                # 如果索引无效，使用原来的方法
+                # 获取要删除的条目信息
+                item = self.output_limit_tree.item(selection[0])
+                values = item['values']
+                
+                # 从数据模型中删除对应条目
+                if len(values) >= 3:  # 确保有足够的数据 (name, limit_type, power_size)
+                    name = values[0]  # 计划名称是第1个元素
+                    power_size = float(values[2])  # power_size是第3个元素（索引为2）
+                    start_date = values[3]  # 开始日期是第4个元素
+                    # 查找并删除匹配的条目
+                    for i, sched in enumerate(self.data_model.output_limit_schedules):
+                        if (sched.get('name', '') == name and
+                            sched.get('power_size', 0) == power_size and 
+                            sched.get('start_date', '') == start_date):
+                            del self.data_model.output_limit_schedules[i]
+                            break
             
             # 从UI中删除条目
             self.output_limit_tree.delete(selection[0])
