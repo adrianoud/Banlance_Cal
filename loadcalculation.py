@@ -9,7 +9,9 @@ import csv
 import json
 import os
 import sys
+import shutil  # 添加缺失的shutil导入
 from datetime import datetime, timedelta  # 添加对timedelta的导入
+
 
 # 尝试导入openpyxl用于Excel导出1
 try:
@@ -140,16 +142,18 @@ class EnergyDataModel:
         self.internal_electric_rate = 0.0         # 厂用电率
         self.solar_irradiance_hourly = [0.0] * 8760  # 光照强度
         self.wind_speed_hourly = [0.0] * 8760     # 风速
+        self.grid_purchase_price_hourly = [0.0] * 8760  # 下网电价
         
         # 数据导入状态跟踪
         self.data_imported = {
             'electric': False,
             'heat': False,
             'solar': False,
-            'wind': False
+            'wind': False,
+            'grid_price': False
         }
         
-        # 风机型号列表，每个元素是一个字典，包含型号名称、参数和数量
+        # 风机型号列表，每个元素是一个字典，包含型号名称、参数、数量和计算方法
         self.wind_turbine_models = [
             {
                 'name': '默认型号',
@@ -161,7 +165,7 @@ class EnergyDataModel:
                     'rated_power': 2000.0
                 },
                 'count': 10,
-                'output_correction_factor': 1.0  # 出力修正系数，默认值为1
+                'output_correction_factor': 1.0  # 出力修正系数，默认値为1
             }
         ]
         
@@ -255,6 +259,7 @@ class EnergyDataModel:
             'internal_electric_rate': self.internal_electric_rate,
             'solar_irradiance_hourly': self.solar_irradiance_hourly,
             'wind_speed_hourly': self.wind_speed_hourly,
+            'grid_purchase_price_hourly': self.grid_purchase_price_hourly,  # 下网电价
             'data_imported': self.data_imported,
             'wind_turbine_models': self.wind_turbine_models,
             'pv_models': self.pv_models,
@@ -278,11 +283,13 @@ class EnergyDataModel:
         self.internal_electric_rate = data.get('internal_electric_rate', 0.0)
         self.solar_irradiance_hourly = data.get('solar_irradiance_hourly', [0.0] * 8760)
         self.wind_speed_hourly = data.get('wind_speed_hourly', [0.0] * 8760)
+        self.grid_purchase_price_hourly = data.get('grid_purchase_price_hourly', [0.0] * 8760)  # 下网电价
         self.data_imported = data.get('data_imported', {
             'electric': False,
             'heat': False,
             'solar': False,
-            'wind': False
+            'wind': False,
+            'grid_price': False
         })
         self.wind_turbine_models = data.get('wind_turbine_models', [
             {
@@ -1382,6 +1389,22 @@ class EnergyBalanceApp:
         notebook.columnconfigure(0, weight=1)
         notebook.rowconfigure(0, weight=1)
         
+    def create_data_import_tab(self, notebook):
+        tab = ttk.Frame(notebook, padding="10")
+        notebook.add(tab, text="📊 数据")  # 添加数据图标
+        
+        # 添加返回项目列表按钮
+        back_btn = ttk.Button(tab, text="保存并返回项目列表", command=self.save_and_return_to_project_list)
+        back_btn.grid(row=0, column=3, sticky=tk.E, padx=5, pady=5)
+        
+        # 数据说明
+        info_label = ttk.Label(tab, text="请导入包含8760小时数据的CSV文件\n"
+                                         "文件应包含列: 时间, 电力负荷(kW), 热力负荷(kW), 光照强度(W/m²), 风速(m/s)")
+        info_label.grid(row=1, column=0, columnspan=4, pady=(0, 20), sticky=tk.W)
+        
+        # 添加下载模板按钮
+        ttk.Button(tab, text="下载CSV模板", command=self.download_template).grid(row=2, column=0, pady=5, sticky=tk.W)
+        
     def initialize_data_plot(self):
         """
         初始化导入数据趋势图
@@ -1463,6 +1486,12 @@ class EnergyBalanceApp:
             line, = self.data_ax.plot(hours, wind_data, label='风速(m/s)', linewidth=0.5)
             lines.append(line)
             labels.append('风速(m/s)')
+        
+        if self.data_model.data_imported['grid_price']:
+            grid_price_data = [self.data_model.grid_purchase_price_hourly[i] for i in hours]
+            line, = self.data_ax.plot(hours, grid_price_data, label='下网电价(元/kWh)', linewidth=0.5)
+            lines.append(line)
+            labels.append('下网电价(元/kWh)')
         
         self.data_ax.set_xlabel('小时')
         self.data_ax.set_ylabel('数值')
@@ -2459,7 +2488,6 @@ class EnergyBalanceApp:
                 
                 if save_path:
                     # 复制模板文件到用户指定位置
-                    import shutil
                     shutil.copy2(template_path, save_path)
                     messagebox.showinfo("成功", f"模板文件已保存至:\n{save_path}")
                 else:
@@ -2496,24 +2524,24 @@ class EnergyBalanceApp:
             # 定义文件路径
             template_path = os.path.join(os.path.dirname(__file__), "data_template.csv")
             
-            # 表头
-            headers = ['时间', '电力负荷(kW)', '热力负荷(kW)', '光照强度(W/m²)', '风速(m/s)']
+            # 表头 - 现在包含下网电价列
+            headers = ['时间', '电力负荷(kW)', '热力负荷(kW)', '光照强度(W/m²)', '风速(m/s)', '下网电价(元/kWh)']
             
             # 创建8760小时的示例行（只显示前几行和后几行）
             rows = []
             # 添加前24小时示例
             for i in range(24):  
                 time_str = f"2024-01-01 {i:02d}:00"
-                row = [time_str, "0.0", "0.0", "0.0", "0.0"]
+                row = [time_str, "0.0", "0.0", "0.0", "0.0", "0.0"]
                 rows.append(row)
             
             # 添加说明文字
-            rows.append(["..."] * 5)  # 占位符表示中间省略的行
+            rows.append(["..."] * 6)  # 占位符表示中间省略的行
             
             # 添加最后几行示例
             for i in range(24):  
                 time_str = f"2024-12-31 {i:02d}:00"
-                row = [time_str, "0.0", "0.0", "0.0", "0.0"]
+                row = [time_str, "0.0", "0.0", "0.0", "0.0", "0.0"]
                 rows.append(row)
             
             # 写入CSV文件，使用UTF-8编码并添加BOM
@@ -2656,18 +2684,36 @@ class EnergyBalanceApp:
                 if i >= 8760:
                     break
                 self.data_model.wind_speed_hourly[i] = float(row[1])
+
+        # 读取下网电价数据（如果提供了文件路径）
+        if hasattr(self, 'grid_price_path') and self.grid_price_path.get():
+            try:
+                with open(self.grid_price_path.get(), 'r', encoding='utf-8-sig') as csvfile:
+                    reader = csv.reader(csvfile)
+                    headers = next(reader)
+                    
+                    # 检查表头是否正确
+                    expected_headers = ['时间', '下网电价(元/kWh)']
+                    if headers != expected_headers:
+                        messagebox.showerror("错误", "下网电价文件表头不正确！请使用模板文件格式。")
+                        return
+                    
+                    # 读取数据
+                    for i, row in enumerate(reader):
+                        if i >= 8760:
+                            break
+                        self.data_model.grid_purchase_price_hourly[i] = float(row[1])
+                        
+                    # 标记下网电价数据已导入
+                    self.data_model.data_imported['grid_price'] = True
+            except FileNotFoundError:
+                # 如果文件不存在，保持默认值为0，并标记为未导入
+                self.data_model.data_imported['grid_price'] = False
+                # 不报错，只是使用默认值0
+        else:
+            # 如果没有提供下网电价文件路径，保持默认值为0，并标记为未导入
+            self.data_model.data_imported['grid_price'] = False
                 
-    def refresh_model_lists(self):
-        """
-        刷新所有型号列表
-        """
-        self.root.after(100, self.refresh_wind_model_list)
-        self.root.after(100, self.refresh_pv_model_list)
-        
-        # 更新总装机容量显示
-        self.root.after(150, self.update_wind_total_capacity)
-        self.root.after(150, self.update_pv_total_capacity)
-        
     def refresh_wind_model_list(self):
         """
         刷新风机型号列表
@@ -2676,7 +2722,6 @@ class EnergyBalanceApp:
         for model in self.data_model.wind_turbine_models:
             self.wind_model_listbox.insert(tk.END, model['name'])
         
-        # 如果之前有选中的项，尝试重新选中它
         if self.current_editing_index is not None and self.current_editing_index < len(self.data_model.wind_turbine_models):
             self.wind_model_listbox.selection_clear(0, tk.END)
             self.wind_model_listbox.selection_set(self.current_editing_index)
@@ -2920,6 +2965,7 @@ class EnergyBalanceApp:
             self.data_model.heat_load_hourly = [0.0] * 8760
             self.data_model.solar_irradiance_hourly = [0.0] * 8760
             self.data_model.wind_speed_hourly = [0.0] * 8760
+            self.data_model.grid_purchase_price_hourly = [0.0] * 8760  # 清空下网电价数据
             
             # 检查使用哪种导入模式
             if self.single_file_mode.get():
@@ -2942,17 +2988,42 @@ class EnergyBalanceApp:
             
         except Exception as e:
             messagebox.showerror("错误", f"数据导入失败: {str(e)}")
-    
+            
     def import_single_file_data(self):
         """
         从单一文件导入所有数据
         """
-        try:
-            file_path = self.single_file_path.get()
-            self.read_csv_data(file_path, single_file=True)
-        except Exception as e:
-            raise Exception(f"从单一文件导入数据时出错: {str(e)}")
-    
+        import csv
+        
+        with open(self.single_file_path.get(), 'r', encoding='utf-8-sig') as csvfile:
+            reader = csv.reader(csvfile)
+            headers = next(reader)
+            
+            # 检查表头是否正确 - 现在支持包含下网电价的表头
+            expected_headers_basic = ['时间', '电力负荷(kW)', '热力负荷(kW)', '光照强度(W/m²)', '风速(m/s)']
+            expected_headers_with_price = ['时间', '电力负荷(kW)', '热力负荷(kW)', '光照强度(W/m²)', '风速(m/s)', '下网电价(元/kWh)']
+            
+            if headers != expected_headers_basic and headers != expected_headers_with_price:
+                messagebox.showerror("错误", "文件表头不正确！请使用模板文件格式。")
+                return
+            
+            # 读取数据
+            for i, row in enumerate(reader):
+                if i >= 8760:
+                    break
+                self.data_model.electric_load_hourly[i] = float(row[1])
+                self.data_model.heat_load_hourly[i] = float(row[2])
+                self.data_model.solar_irradiance_hourly[i] = float(row[3])
+                self.data_model.wind_speed_hourly[i] = float(row[4])
+                
+                # 如果表头包含下网电价列，则导入该数据
+                if len(row) > 5 and headers == expected_headers_with_price:
+                    self.data_model.grid_purchase_price_hourly[i] = float(row[5])
+                    self.data_model.data_imported['grid_price'] = True
+                else:
+                    # 如果没有下网电价列，默认为0，标记为未导入
+                    self.data_model.data_imported['grid_price'] = False
+                
     def import_multiple_files_data(self):
         """
         从多个文件分别导入数据
@@ -3005,70 +3076,52 @@ class EnergyBalanceApp:
                 
                 # 读取数据行
                 for i, row in enumerate(reader):
-                    if i >= 8760:  # 限制为8760小时的数据
+                    if i >= 8760:  # 最多读取8760小时的数据
                         break
+                        
+                    # 检查行是否有足够的列数
+                    if len(row) < 2:
+                        raise Exception(f"数据格式错误，第{i+2}行缺少数值列")
                     
-                    if single_file:
-                        # 从单一文件中读取所有数据
-                        time_str = row[0]
-                        self.data_model.electric_load_hourly[i] = float(row[1])
-                        self.data_model.heat_load_hourly[i] = float(row[2])
-                        self.data_model.solar_irradiance_hourly[i] = float(row[3])
-                        self.data_model.wind_speed_hourly[i] = float(row[4])
-                        
-                        # 标记所有数据已导入
-                        self.data_model.data_imported['electric'] = True
-                        self.data_model.data_imported['heat'] = True
-                        self.data_model.data_imported['solar'] = True
-                        self.data_model.data_imported['wind'] = True
-                    else:
-                        # 从多个文件中读取指定类型的数据
-                        # 根据表头自动识别数据类型
-                        time_str = row[0]
-                        
-                        # 查找数值列（第二列）
-                        if len(row) < 2:
-                            raise Exception(f"数据格式错误，第{i+2}行缺少数值列")
-                        
-                        value = float(row[1])
-                        
-                        # 根据表头自动判断数据类型
-                        if data_type is None:
-                            header = headers[1] if len(headers) > 1 else ""  # 获取数值列的表头
-                            if "电力负荷" in header:
-                                data_type = "electric"
-                                self.data_model.data_imported['electric'] = True
-                            elif "热力负荷" in header:
-                                data_type = "heat"
-                                self.data_model.data_imported['heat'] = True
-                            elif "光照强度" in header:
-                                data_type = "solar"
-                                self.data_model.data_imported['solar'] = True
-                            elif "风速" in header:
-                                data_type = "wind"
-                                self.data_model.data_imported['wind'] = True
-                            else:
-                                raise Exception(f"无法识别的数据类型: {header}")
+                    value = float(row[1])
+                    
+                    # 根据表头自动判断数据类型
+                    if data_type is None:
+                        header = headers[1] if len(headers) > 1 else ""  # 获取数值列的表头
+                        if "电力负荷" in header:
+                            data_type = "electric"
+                            self.data_model.data_imported['electric'] = True
+                        elif "热力负荷" in header:
+                            data_type = "heat"
+                            self.data_model.data_imported['heat'] = True
+                        elif "光照强度" in header:
+                            data_type = "solar"
+                            self.data_model.data_imported['solar'] = True
+                        elif "风速" in header:
+                            data_type = "wind"
+                            self.data_model.data_imported['wind'] = True
                         else:
-                            # 标记对应类型数据已导入
-                            if data_type == "electric":
-                                self.data_model.data_imported['electric'] = True
-                            elif data_type == "heat":
-                                self.data_model.data_imported['heat'] = True
-                            elif data_type == "solar":
-                                self.data_model.data_imported['solar'] = True
-                            elif data_type == "wind":
-                                self.data_model.data_imported['wind'] = True
-                        
-                        # 根据数据类型分配数据
+                            raise Exception(f"无法识别的数据类型: {header}")
+                    else:
+                        # 标记对应类型数据已导入
                         if data_type == "electric":
-                            self.data_model.electric_load_hourly[i] = value
+                            self.data_model.data_imported['electric'] = True
                         elif data_type == "heat":
-                            self.data_model.heat_load_hourly[i] = value
+                            self.data_model.data_imported['heat'] = True
                         elif data_type == "solar":
-                            self.data_model.solar_irradiance_hourly[i] = value
+                            self.data_model.data_imported['solar'] = True
                         elif data_type == "wind":
-                            self.data_model.wind_speed_hourly[i] = value
+                            self.data_model.data_imported['wind'] = True
+                    
+                    # 根据数据类型分配数据
+                    if data_type == "electric":
+                        self.data_model.electric_load_hourly[i] = value
+                    elif data_type == "heat":
+                        self.data_model.heat_load_hourly[i] = value
+                    elif data_type == "solar":
+                        self.data_model.solar_irradiance_hourly[i] = value
+                    elif data_type == "wind":
+                        self.data_model.wind_speed_hourly[i] = value
                             
         except FileNotFoundError:
             raise Exception(f"文件未找到: {file_path}")
@@ -3089,6 +3142,8 @@ class EnergyBalanceApp:
             imported_data.append("光照强度")
         if self.data_model.data_imported['wind']:
             imported_data.append("风速")
+        if self.data_model.data_imported['grid_price']:
+            imported_data.append("下网电价")
         
         imported_info = "已导入数据: " + ", ".join(imported_data) if imported_data else "未导入任何数据"
         
@@ -3110,6 +3165,10 @@ class EnergyBalanceApp:
 风速:     最小 {min(self.data_model.wind_speed_hourly):.2f} m/s, 
           最大 {max(self.data_model.wind_speed_hourly):.2f} m/s, 
           平均 {np.mean(self.data_model.wind_speed_hourly):.2f} m/s
+
+下网电价: 最小 {min(self.data_model.grid_purchase_price_hourly):.2f} 元/kWh, 
+          最大 {max(self.data_model.grid_purchase_price_hourly):.2f} 元/kWh, 
+          平均 {np.mean(self.data_model.grid_purchase_price_hourly):.2f} 元/kWh
 
 厂用电率: {self.data_model.internal_electric_rate*100:.2f}%
 """
