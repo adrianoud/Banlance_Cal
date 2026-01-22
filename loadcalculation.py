@@ -1535,84 +1535,43 @@ class EnergyBalanceApp:
         
         # 数据说明
         info_label = ttk.Label(tab, text="请导入包含8760小时数据的CSV文件\n"
-                                         "文件应包含列: 时间, 电力负荷(kW), 热力负荷(kW), 光照强度(W/m²), 风速(m/s)")
+                                         "文件应包含列: 时间, 电力负荷(kW), 热力负荷(kW), 光照强度(W/m²), 风速(m/s), 下网电价(元/kWh)")
         info_label.grid(row=1, column=0, columnspan=4, pady=(0, 20), sticky=tk.W)
         
         # 添加下载模板按钮
         ttk.Button(tab, text="下载CSV模板", command=self.download_template).grid(row=2, column=0, pady=5, sticky=tk.W)
         
-        # 单一文件导入开关
-        self.single_file_mode = tk.BooleanVar(value=False)
-        self.single_file_check = ttk.Checkbutton(
-            tab, 
-            text="使用单一数据文件导入所有数据", 
-            variable=self.single_file_mode,
-            command=self.toggle_file_mode
-        )
-        self.single_file_check.grid(row=2, column=1, columnspan=2, pady=5, sticky=tk.W)
-        
         # 单一文件导入控件
         ttk.Label(tab, text="统一数据文件:").grid(row=3, column=0, sticky=tk.W, pady=5)
         self.single_file_path = tk.StringVar()
-        self.single_file_entry = ttk.Entry(tab, textvariable=self.single_file_path, width=50, state=tk.DISABLED)
+        # 初始化单文件模式变量
+        self.single_file_mode = tk.BooleanVar(value=True)  # 默认使用单文件模式
+        self.single_file_entry = ttk.Entry(tab, textvariable=self.single_file_path, width=50)
         self.single_file_entry.grid(row=3, column=1, padx=5, pady=5)
         self.single_file_button = ttk.Button(
             tab, 
             text="浏览...", 
-            command=lambda: self.browse_file(self.single_file_path),
-            state=tk.DISABLED
+            command=lambda: self.browse_file(self.single_file_path)
         )
         self.single_file_button.grid(row=3, column=2, pady=5)
         
-        # 电力负荷导入
-        ttk.Label(tab, text="电力负荷数据:").grid(row=4, column=0, sticky=tk.W, pady=5)
-        self.elec_load_file = tk.StringVar()
-        self.elec_load_entry = ttk.Entry(tab, textvariable=self.elec_load_file, width=50)
-        self.elec_load_entry.grid(row=4, column=1, padx=5, pady=5)
-        self.elec_load_button = ttk.Button(tab, text="浏览...", command=lambda: self.browse_file(self.elec_load_file))
-        self.elec_load_button.grid(row=4, column=2, pady=5)
-        
-        # 热力负荷导入
-        ttk.Label(tab, text="热力负荷数据:").grid(row=5, column=0, sticky=tk.W, pady=5)
-        self.heat_load_file = tk.StringVar()
-        self.heat_load_entry = ttk.Entry(tab, textvariable=self.heat_load_file, width=50)
-        self.heat_load_entry.grid(row=5, column=1, padx=5, pady=5)
-        self.heat_load_button = ttk.Button(tab, text="浏览...", command=lambda: self.browse_file(self.heat_load_file))
-        self.heat_load_button.grid(row=5, column=2, pady=5)
-        
-        # 光照强度导入
-        ttk.Label(tab, text="光照强度数据:").grid(row=6, column=0, sticky=tk.W, pady=5)
-        self.solar_file = tk.StringVar()
-        self.solar_entry = ttk.Entry(tab, textvariable=self.solar_file, width=50)
-        self.solar_entry.grid(row=6, column=1, padx=5, pady=5)
-        self.solar_button = ttk.Button(tab, text="浏览...", command=lambda: self.browse_file(self.solar_file))
-        self.solar_button.grid(row=6, column=2, pady=5)
-        
-        # 风速导入
-        ttk.Label(tab, text="风速数据:").grid(row=7, column=0, sticky=tk.W, pady=5)
-        self.wind_file = tk.StringVar()
-        self.wind_entry = ttk.Entry(tab, textvariable=self.wind_file, width=50)
-        self.wind_entry.grid(row=7, column=1, padx=5, pady=5)
-        self.wind_button = ttk.Button(tab, text="浏览...", command=lambda: self.browse_file(self.wind_file))
-        self.wind_button.grid(row=7, column=2, pady=5)
-        
         # 厂用电率设置
-        ttk.Label(tab, text="厂用电率:").grid(row=8, column=0, sticky=tk.W, pady=5)
+        ttk.Label(tab, text="厂用电率:").grid(row=4, column=0, sticky=tk.W, pady=5)
         self.internal_rate_var = tk.DoubleVar(value=0.05)
-        ttk.Entry(tab, textvariable=self.internal_rate_var, width=20).grid(row=8, column=1, sticky=tk.W, padx=5, pady=5)
-        ttk.Label(tab, text="(小数形式, 如0.05表示5%)").grid(row=8, column=1, sticky=tk.E, padx=5, pady=5)
+        ttk.Entry(tab, textvariable=self.internal_rate_var, width=20).grid(row=4, column=1, sticky=tk.W, padx=5, pady=5)
+        ttk.Label(tab, text="(小数形式, 如0.05表示5%)").grid(row=4, column=1, sticky=tk.E, padx=5, pady=5)
         
         # 导入按钮
-        ttk.Button(tab, text="导入所有数据", command=self.import_all_data).grid(row=9, column=0, columnspan=3, pady=20)
+        ttk.Button(tab, text="导入数据", command=self.import_all_data).grid(row=5, column=0, columnspan=3, pady=20)
         
         # 刷新图表按钮
-        ttk.Button(tab, text="刷新趋势图", command=self.update_imported_data_plot).grid(row=9, column=2, pady=20, sticky=tk.E)
+        ttk.Button(tab, text="刷新趋势图", command=self.update_imported_data_plot).grid(row=5, column=2, pady=20, sticky=tk.E)
         
         # 数据统计
         stats_frame = ttk.LabelFrame(tab, text="数据统计", padding="10")
-        stats_frame.grid(row=10, column=0, columnspan=3, sticky=(tk.W, tk.E, tk.N, tk.S), pady=10)
+        stats_frame.grid(row=6, column=0, columnspan=3, sticky=(tk.W, tk.E, tk.N, tk.S), pady=10)
         
-        self.stats_text = tk.Text(stats_frame, height=4, width=80)
+        self.stats_text = tk.Text(stats_frame, height=6, width=80)  # 增加高度
         scrollbar = ttk.Scrollbar(stats_frame, orient=tk.VERTICAL, command=self.stats_text.yview)
         self.stats_text.configure(yscrollcommand=scrollbar.set)
         
@@ -1621,7 +1580,7 @@ class EnergyBalanceApp:
         
         # 时间段选择区域
         time_range_frame = ttk.LabelFrame(tab, text="时间段选择", padding="10")
-        time_range_frame.grid(row=11, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=10)
+        time_range_frame.grid(row=7, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=10)
         
         ttk.Label(time_range_frame, text="开始日期:").grid(row=0, column=0, sticky=tk.W, padx=(0, 5))
         self.start_date_var = tk.StringVar(value="2025-01-01")
@@ -1637,17 +1596,17 @@ class EnergyBalanceApp:
         
         # 图表展示（用于显示导入数据的趋势）
         plot_frame = ttk.LabelFrame(tab, text="已导入数据趋势图", padding="10")
-        plot_frame.grid(row=12, column=0, columnspan=3, sticky=(tk.W, tk.E, tk.N, tk.S), pady=10)
+        plot_frame.grid(row=8, column=0, columnspan=3, sticky=(tk.W, tk.E, tk.N, tk.S), pady=10)
         
         # 创建matplotlib图形
-        self.data_figure = Figure(figsize=(10, 3), dpi=100)  # 调整高度
+        self.data_figure = Figure(figsize=(10, 5), dpi=100)  # 增加高度
         self.data_ax = self.data_figure.add_subplot(111)
         self.data_canvas = FigureCanvasTkAgg(self.data_figure, plot_frame)
         self.data_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
         
         # 配置权重
         tab.columnconfigure(0, weight=1)
-        tab.rowconfigure(12, weight=1)  # 给图表区域分配更多空间
+        tab.rowconfigure(8, weight=1)  # 给图表区域分配更多空间
         stats_frame.columnconfigure(0, weight=1)
         stats_frame.rowconfigure(0, weight=1)
         time_range_frame.columnconfigure(5, weight=1)
@@ -2563,17 +2522,13 @@ class EnergyBalanceApp:
             self.data_model.heat_load_hourly = [0.0] * 8760
             self.data_model.solar_irradiance_hourly = [0.0] * 8760
             self.data_model.wind_speed_hourly = [0.0] * 8760
+            self.data_model.grid_purchase_price_hourly = [0.0] * 8760  # 同时清空下网电价数据
             
-            # 检查使用哪种导入模式
-            if self.single_file_mode.get():
-                # 使用单一文件导入模式
-                if not self.single_file_path.get():
-                    messagebox.showerror("错误", "请选择统一数据文件!")
-                    return
-                self.import_single_file_data()
-            else:
-                # 使用多文件导入模式
-                self.import_multiple_files_data()
+            # 使用单一文件导入模式
+            if not self.single_file_path.get():
+                messagebox.showerror("错误", "请选择统一数据文件!")
+                return
+            self.import_single_file_data()
             
             # 更新统计信息
             self.update_statistics()
@@ -2596,10 +2551,12 @@ class EnergyBalanceApp:
             reader = csv.reader(csvfile)
             headers = next(reader)
             
-            # 检查表头是否正确
-            expected_headers = ['时间', '电力负荷(kW)', '热力负荷(kW)', '光照强度(W/m²)', '风速(m/s)']
-            if headers != expected_headers:
-                messagebox.showerror("错误", "文件表头不正确！请使用模板文件格式。")
+            # 检查表头是否正确 - 现在支持包含下网电价的格式
+            expected_headers_basic = ['时间', '电力负荷(kW)', '热力负荷(kW)', '光照强度(W/m²)', '风速(m/s)']
+            expected_headers_with_price = ['时间', '电力负荷(kW)', '热力负荷(kW)', '光照强度(W/m²)', '风速(m/s)', '下网电价(元/kWh)']
+            
+            if headers != expected_headers_basic and headers != expected_headers_with_price:
+                messagebox.showerror("错误", "文件表头不正确！请使用模板文件格式。\n期望格式: ['时间', '电力负荷(kW)', '热力负荷(kW)', '光照强度(W/m²)', '风速(m/s)'[, '下网电价(元/kWh)']]")
                 return
             
             # 读取数据
@@ -2611,108 +2568,20 @@ class EnergyBalanceApp:
                 self.data_model.solar_irradiance_hourly[i] = float(row[3])
                 self.data_model.wind_speed_hourly[i] = float(row[4])
                 
-    def import_multiple_files_data(self):
-        """
-        从多个文件导入数据
-        """
-        import csv
-        
-        # 读取电力负荷数据
-        with open(self.electric_load_path.get(), 'r', encoding='utf-8-sig') as csvfile:
-            reader = csv.reader(csvfile)
-            headers = next(reader)
-            
-            # 检查表头是否正确
-            expected_headers = ['时间', '电力负荷(kW)']
-            if headers != expected_headers:
-                messagebox.showerror("错误", "电力负荷文件表头不正确！请使用模板文件格式。")
-                return
-            
-            # 读取数据
-            for i, row in enumerate(reader):
-                if i >= 8760:
-                    break
-                self.data_model.electric_load_hourly[i] = float(row[1])
+                # 如果文件包含下网电价数据，则导入
+                if len(row) > 5:
+                    self.data_model.grid_purchase_price_hourly[i] = float(row[5])
+                    self.data_model.data_imported['grid_price'] = True  # 标记下网电价数据已导入
+                else:
+                    self.data_model.data_imported['grid_price'] = False  # 标记下网电价数据未导入
                 
-        # 读取热力负荷数据
-        with open(self.heat_load_path.get(), 'r', encoding='utf-8-sig') as csvfile:
-            reader = csv.reader(csvfile)
-            headers = next(reader)
-            
-            # 检查表头是否正确
-            expected_headers = ['时间', '热力负荷(kW)']
-            if headers != expected_headers:
-                messagebox.showerror("错误", "热力负荷文件表头不正确！请使用模板文件格式。")
-                return
-            
-            # 读取数据
-            for i, row in enumerate(reader):
-                if i >= 8760:
-                    break
-                self.data_model.heat_load_hourly[i] = float(row[1])
+            # 标记所有数据类型为已导入（只要有数据就标记为导入）
+            self.data_model.data_imported['electric'] = any(self.data_model.electric_load_hourly)
+            self.data_model.data_imported['heat'] = any(self.data_model.heat_load_hourly)
+            self.data_model.data_imported['solar'] = any(self.data_model.solar_irradiance_hourly)
+            self.data_model.data_imported['wind'] = any(self.data_model.wind_speed_hourly)
                 
-        # 读取光照强度数据
-        with open(self.solar_irradiance_path.get(), 'r', encoding='utf-8-sig') as csvfile:
-            reader = csv.reader(csvfile)
-            headers = next(reader)
-            
-            # 检查表头是否正确
-            expected_headers = ['时间', '光照强度(W/m²)']
-            if headers != expected_headers:
-                messagebox.showerror("错误", "光照强度文件表头不正确！请使用模板文件格式。")
-                return
-            
-            # 读取数据
-            for i, row in enumerate(reader):
-                if i >= 8760:
-                    break
-                self.data_model.solar_irradiance_hourly[i] = float(row[1])
-                
-        # 读取风速数据
-        with open(self.wind_speed_path.get(), 'r', encoding='utf-8-sig') as csvfile:
-            reader = csv.reader(csvfile)
-            headers = next(reader)
-            
-            # 检查表头是否正确
-            expected_headers = ['时间', '风速(m/s)']
-            if headers != expected_headers:
-                messagebox.showerror("错误", "风速文件表头不正确！请使用模板文件格式。")
-                return
-            
-            # 读取数据
-            for i, row in enumerate(reader):
-                if i >= 8760:
-                    break
-                self.data_model.wind_speed_hourly[i] = float(row[1])
 
-        # 读取下网电价数据（如果提供了文件路径）
-        if hasattr(self, 'grid_price_path') and self.grid_price_path.get():
-            try:
-                with open(self.grid_price_path.get(), 'r', encoding='utf-8-sig') as csvfile:
-                    reader = csv.reader(csvfile)
-                    headers = next(reader)
-                    
-                    # 检查表头是否正确
-                    expected_headers = ['时间', '下网电价(元/kWh)']
-                    if headers != expected_headers:
-                        messagebox.showerror("错误", "下网电价文件表头不正确！请使用模板文件格式。")
-                        return
-                    
-                    # 读取数据
-                    for i, row in enumerate(reader):
-                        if i >= 8760:
-                            break
-                        self.data_model.grid_purchase_price_hourly[i] = float(row[1])
-                        
-                    # 标记下网电价数据已导入
-                    self.data_model.data_imported['grid_price'] = True
-            except FileNotFoundError:
-                # 如果文件不存在，保持默认值为0，并标记为未导入
-                self.data_model.data_imported['grid_price'] = False
-                # 不报错，只是使用默认值0
-        else:
-            # 如果没有提供下网电价文件路径，保持默认值为0，并标记为未导入
-            self.data_model.data_imported['grid_price'] = False
                 
     def refresh_wind_model_list(self):
         """
@@ -3388,38 +3257,7 @@ class EnergyBalanceApp:
         # 刷新画布
         self.canvas.draw()
         
-    def toggle_file_mode(self):
-        """
-        切换文件导入模式（单一文件 vs 多文件）
-        """
-        if self.single_file_mode.get():
-            # 启用单一文件模式
-            self.single_file_entry.config(state=tk.NORMAL)
-            self.single_file_button.config(state=tk.NORMAL)
-            
-            # 禁用多文件模式
-            self.elec_load_entry.config(state=tk.DISABLED)
-            self.elec_load_button.config(state=tk.DISABLED)
-            self.heat_load_entry.config(state=tk.DISABLED)
-            self.heat_load_button.config(state=tk.DISABLED)
-            self.solar_entry.config(state=tk.DISABLED)
-            self.solar_button.config(state=tk.DISABLED)
-            self.wind_entry.config(state=tk.DISABLED)
-            self.wind_button.config(state=tk.DISABLED)
-        else:
-            # 启用多文件模式
-            self.single_file_entry.config(state=tk.DISABLED)
-            self.single_file_button.config(state=tk.DISABLED)
-            
-            # 禁用单一文件模式
-            self.elec_load_entry.config(state=tk.NORMAL)
-            self.elec_load_button.config(state=tk.NORMAL)
-            self.heat_load_entry.config(state=tk.NORMAL)
-            self.heat_load_button.config(state=tk.NORMAL)
-            self.solar_entry.config(state=tk.NORMAL)
-            self.solar_button.config(state=tk.NORMAL)
-            self.wind_entry.config(state=tk.NORMAL)
-            self.wind_button.config(state=tk.NORMAL)
+
             
     def generate_sample_data(self):
         """生成示例数据用于演示"""
