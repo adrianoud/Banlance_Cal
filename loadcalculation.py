@@ -1411,7 +1411,7 @@ class EnergyBalanceApp:
         """
         # 检查是否已经创建了图形对象，如果没有则创建
         if not hasattr(self, 'data_ax'):
-            self.data_figure = Figure(figsize=(10, 4), dpi=100)
+            self.data_figure = Figure(figsize=(10, 6), dpi=100)  # 增加高度
             self.data_ax = self.data_figure.add_subplot(111)
         
         self.data_ax.clear()
@@ -1428,6 +1428,8 @@ class EnergyBalanceApp:
         
         # 启用matplotlib交互功能
         self.data_figure.tight_layout()
+        # 为图例预留额外空间
+        self.data_figure.subplots_adjust(right=0.85)
         
     def update_imported_data_plot(self):
         """
@@ -1459,46 +1461,65 @@ class EnergyBalanceApp:
         # 获取时间段内的数据
         hours = list(range(start_hour, end_hour + 1))
         
+        # 将小时转换为日期格式
+        dates = [datetime(2025, 1, 1) + timedelta(hours=h) for h in hours]
+        date_labels = [d.strftime('%m-%d') for d in dates]
+        
         # 绘制已导入的数据
         lines = []  # 存储所有绘制的线条
         labels = []  # 存储所有标签
         
         if self.data_model.data_imported['electric']:
             electric_data = [self.data_model.electric_load_hourly[i] for i in hours]
-            line, = self.data_ax.plot(hours, electric_data, label='电力负荷(kW)', linewidth=0.5)
+            line, = self.data_ax.plot(dates, electric_data, label='电力负荷(kW)', linewidth=0.5)
             lines.append(line)
             labels.append('电力负荷(kW)')
             
         if self.data_model.data_imported['heat']:
             heat_data = [self.data_model.heat_load_hourly[i] for i in hours]
-            line, = self.data_ax.plot(hours, heat_data, label='热力负荷(kW)', linewidth=0.5)
+            line, = self.data_ax.plot(dates, heat_data, label='热力负荷(kW)', linewidth=0.5)
             lines.append(line)
             labels.append('热力负荷(kW)')
             
         if self.data_model.data_imported['solar']:
             solar_data = [self.data_model.solar_irradiance_hourly[i] for i in hours]
-            line, = self.data_ax.plot(hours, solar_data, label='光照强度(W/m²)', linewidth=0.5)
+            line, = self.data_ax.plot(dates, solar_data, label='光照强度(W/m²)', linewidth=0.5)
             lines.append(line)
             labels.append('光照强度(W/m²)')
             
         if self.data_model.data_imported['wind']:
             wind_data = [self.data_model.wind_speed_hourly[i] for i in hours]
-            line, = self.data_ax.plot(hours, wind_data, label='风速(m/s)', linewidth=0.5)
+            line, = self.data_ax.plot(dates, wind_data, label='风速(m/s)', linewidth=0.5)
             lines.append(line)
             labels.append('风速(m/s)')
         
         if self.data_model.data_imported['grid_price']:
             grid_price_data = [self.data_model.grid_purchase_price_hourly[i] for i in hours]
-            line, = self.data_ax.plot(hours, grid_price_data, label='下网电价(元/kWh)', linewidth=0.5)
+            line, = self.data_ax.plot(dates, grid_price_data, label='下网电价(元/kWh)', linewidth=0.5)
             lines.append(line)
             labels.append('下网电价(元/kWh)')
         
-        self.data_ax.set_xlabel('小时')
+        self.data_ax.set_xlabel('日期 (MM-DD)')
         self.data_ax.set_ylabel('数值')
         self.data_ax.set_title(f'已导入数据趋势图 ({self.start_date_var.get()} 至 {self.end_date_var.get()})')
         
+        # 设置x轴日期格式
+        self.data_ax.xaxis.set_major_formatter(plt.matplotlib.dates.DateFormatter('%m-%d'))
+        
+        # 根据时间跨度自动选择适当的日期定位器
+        date_span = (dates[-1] - dates[0]).days
+        if date_span <= 31:  # 一个月内，使用周定位器
+            self.data_ax.xaxis.set_major_locator(plt.matplotlib.dates.WeekdayLocator(interval=1))
+        elif date_span <= 180:  # 6个月内，使用双周定位器
+            self.data_ax.xaxis.set_major_locator(plt.matplotlib.dates.WeekdayLocator(interval=2))
+        else:  # 超过6个月，使用月定位器
+            self.data_ax.xaxis.set_major_locator(plt.matplotlib.dates.MonthLocator())
+        
+        # 旋转x轴标签以更好地显示
+        plt.setp(self.data_ax.xaxis.get_majorticklabels(), rotation=45, ha='right')
+        
         # 创建图例并启用点击功能
-        legend = self.data_ax.legend()
+        legend = self.data_ax.legend(loc='upper left', bbox_to_anchor=(1, 1))  # 固定图例位置
         
         # 启用图例点击交互
         lined = {}
@@ -1520,7 +1541,12 @@ class EnergyBalanceApp:
         self.data_ax.grid(True, alpha=0.3)
         
         # 设置x轴范围
-        self.data_ax.set_xlim(start_hour, end_hour)
+        self.data_ax.set_xlim(dates[0], dates[-1])
+        
+        # 调整子图参数以确保图例和标签完全显示
+        self.data_figure.tight_layout()
+        # 为图例预留额外空间
+        self.data_figure.subplots_adjust(right=0.85)
         
         # 刷新画布
         self.data_canvas.draw()
@@ -1599,7 +1625,7 @@ class EnergyBalanceApp:
         plot_frame.grid(row=8, column=0, columnspan=3, sticky=(tk.W, tk.E, tk.N, tk.S), pady=10)
         
         # 创建matplotlib图形
-        self.data_figure = Figure(figsize=(10, 5), dpi=100)  # 增加高度
+        self.data_figure = Figure(figsize=(10, 6), dpi=100)  # 增加高度
         self.data_ax = self.data_figure.add_subplot(111)
         self.data_canvas = FigureCanvasTkAgg(self.data_figure, plot_frame)
         self.data_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
@@ -2404,7 +2430,7 @@ class EnergyBalanceApp:
         plot_frame.grid(row=4, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         
         # 创建matplotlib图形
-        self.figure = Figure(figsize=(10, 3), dpi=100)  # 调整高度
+        self.figure = Figure(figsize=(10, 6), dpi=100)  # 增加高度
         self.ax = self.figure.add_subplot(111)
         self.canvas = FigureCanvasTkAgg(self.figure, plot_frame)
         self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
@@ -3207,21 +3233,39 @@ class EnergyBalanceApp:
         peak_pending_output = [self.results.get('hourly_peak_pending_output', [0.0] * 8760)[i] for i in hours]
         peak_output = [self.results.get('hourly_peak_output', [0.0] * 8760)[i] for i in hours]
         
-        # 绘制各类出力组成
-        line_total_load, = self.ax.plot(hours, total_load, label='总负荷', linewidth=0.5, color='blue')
-        line_generation, = self.ax.plot(hours, generation, label='总出力', linewidth=0.5, color='green')
-        line_grid_load, = self.ax.plot(hours, grid_load, label='下网负荷', linewidth=0.5, color='red')
-        fill_pv = self.ax.fill_between(hours, [0]*len(hours), pv_output, label='光伏出力', alpha=0.3, color='orange')
-        fill_wind = self.ax.fill_between(hours, [0]*len(hours), wind_output, label='风机出力', alpha=0.3, color='purple')
-        fill_chp = self.ax.fill_between(hours, [0]*len(hours), chp_output, label='热电联产出力', alpha=0.3, color='brown')
-        fill_peak = self.ax.fill_between(hours, [0]*len(hours), peak_output, label='调峰机组出力', alpha=0.3, color='cyan')
+        # 将小时转换为日期格式
+        dates = [datetime(2025, 1, 1) + timedelta(hours=h) for h in hours]
         
-        self.ax.set_xlabel('小时')
+        # 绘制各类出力组成
+        line_total_load, = self.ax.plot(dates, total_load, label='总负荷', linewidth=0.5, color='blue')
+        line_generation, = self.ax.plot(dates, generation, label='总出力', linewidth=0.5, color='green')
+        line_grid_load, = self.ax.plot(dates, grid_load, label='下网负荷', linewidth=0.5, color='red')
+        fill_pv = self.ax.fill_between(dates, [0]*len(dates), pv_output, label='光伏出力', alpha=0.3, color='orange')
+        fill_wind = self.ax.fill_between(dates, [0]*len(dates), wind_output, label='风机出力', alpha=0.3, color='purple')
+        fill_chp = self.ax.fill_between(dates, [0]*len(dates), chp_output, label='热电联产出力', alpha=0.3, color='brown')
+        fill_peak = self.ax.fill_between(dates, [0]*len(dates), peak_output, label='调峰机组出力', alpha=0.3, color='cyan')
+        
+        self.ax.set_xlabel('日期 (MM-DD)')
         self.ax.set_ylabel('功率 (kW)')
         self.ax.set_title(f'能源供需趋势 ({self.result_start_date_var.get()} 至 {self.result_end_date_var.get()})')
         
+        # 设置x轴日期格式
+        self.ax.xaxis.set_major_formatter(plt.matplotlib.dates.DateFormatter('%m-%d'))
+        
+        # 根据时间跨度自动选择适当的日期定位器
+        date_span = (dates[-1] - dates[0]).days
+        if date_span <= 31:  # 一个月内，使用周定位器
+            self.ax.xaxis.set_major_locator(plt.matplotlib.dates.WeekdayLocator(interval=1))
+        elif date_span <= 180:  # 6个月内，使用双周定位器
+            self.ax.xaxis.set_major_locator(plt.matplotlib.dates.WeekdayLocator(interval=2))
+        else:  # 超过6个月，使用月定位器
+            self.ax.xaxis.set_major_locator(plt.matplotlib.dates.MonthLocator())
+        
+        # 旋转x轴标签以更好地显示
+        plt.setp(self.ax.xaxis.get_majorticklabels(), rotation=45, ha='right')
+        
         # 创建图例并启用点击功能
-        legend = self.ax.legend()
+        legend = self.ax.legend(loc='upper left', bbox_to_anchor=(1, 1))  # 固定图例位置
         
         # 启用图例点击交互
         lines = [line_total_load, line_generation, line_grid_load]
@@ -3252,7 +3296,12 @@ class EnergyBalanceApp:
         self.ax.grid(True, alpha=0.3)
         
         # 设置x轴范围
-        self.ax.set_xlim(start_hour, end_hour)
+        self.ax.set_xlim(dates[0], dates[-1])
+        
+        # 调整子图参数以确保图例和标签完全显示
+        self.figure.tight_layout()
+        # 为图例预留额外空间
+        self.figure.subplots_adjust(right=0.85)
         
         # 刷新画布
         self.canvas.draw()
