@@ -1378,6 +1378,9 @@ class EnergyBalanceApp:
         
         # 计算与结果标签页
         self.create_calculation_tab(notebook)
+                
+        # 优化标签页
+        self.create_optimization_tab(notebook)
         
         # 配置网格权重
         self.root.columnconfigure(0, weight=1)
@@ -1391,7 +1394,7 @@ class EnergyBalanceApp:
         
     def create_data_import_tab(self, notebook):
         tab = ttk.Frame(notebook, padding="10")
-        notebook.add(tab, text="📊 数据")  # 添加数据图标
+        notebook.add(tab, text="📊 数据导入")  # 添加数据图标
         
         # 添加返回项目列表按钮
         back_btn = ttk.Button(tab, text="保存并返回项目列表", command=self.save_and_return_to_project_list)
@@ -1551,9 +1554,13 @@ class EnergyBalanceApp:
         # 刷新画布
         self.data_canvas.draw()
         
+    def create_function_settings_tab(self, notebook):
+        tab = ttk.Frame(notebook, padding="10")
+        notebook.add(tab, text="⚙️ 机组设置")  # 修改标签名称为"设置"并添加齿轮图标
+        
     def create_data_import_tab(self, notebook):
         tab = ttk.Frame(notebook, padding="10")
-        notebook.add(tab, text="📊 数据")  # 添加数据图标
+        notebook.add(tab, text="📊 数据导入")  # 添加数据图标
         
         # 添加返回项目列表按钮
         back_btn = ttk.Button(tab, text="保存并返回项目列表", command=self.save_and_return_to_project_list)
@@ -1638,10 +1645,329 @@ class EnergyBalanceApp:
         time_range_frame.columnconfigure(5, weight=1)
         plot_frame.columnconfigure(0, weight=1)
         plot_frame.rowconfigure(0, weight=1)
+
+    def create_function_data_tab(self, notebook):
+        tab = ttk.Frame(notebook, padding="10")
+        notebook.add(tab, text="📊 数据导入")  # 修改为正确的标签名称
+        
+        # 统计信息区域
+        stats_frame = ttk.LabelFrame(tab, text="统计信息", padding="10")
+        stats_frame.grid(row=0, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
+        
+        ttk.Label(stats_frame, text="总电力消耗 (kWh):").grid(row=0, column=0, sticky=tk.W, pady=2)
+        self.total_consumption_var = tk.StringVar(value="0.0")
+        ttk.Entry(stats_frame, textvariable=self.total_consumption_var, width=20).grid(row=0, column=1, pady=2)
+        
+        ttk.Label(stats_frame, text="平均电力负荷 (kW):").grid(row=1, column=0, sticky=tk.W, pady=2)
+        self.avg_load_var = tk.StringVar(value="0.0")
+        ttk.Entry(stats_frame, textvariable=self.avg_load_var, width=20).grid(row=1, column=1, pady=2)
+        
+        ttk.Label(stats_frame, text="最大电力负荷 (kW):").grid(row=2, column=0, sticky=tk.W, pady=2)
+        self.max_load_var = tk.StringVar(value="0.0")
+        ttk.Entry(stats_frame, textvariable=self.max_load_var, width=20).grid(row=2, column=1, pady=2)
+        
+        ttk.Label(stats_frame, text="最小电力负荷 (kW):").grid(row=3, column=0, sticky=tk.W, pady=2)
+        self.min_load_var = tk.StringVar(value="0.0")
+        ttk.Entry(stats_frame, textvariable=self.min_load_var, width=20).grid(row=3, column=1, pady=2)
+        
+        ttk.Label(stats_frame, text="运行时间 (小时):").grid(row=4, column=0, sticky=tk.W, pady=2)
+        self.runtime_var = tk.StringVar(value="0.0")
+        ttk.Entry(stats_frame, textvariable=self.runtime_var, width=20).grid(row=4, column=1, pady=2)
+        
+        ttk.Label(stats_frame, text="停机时间 (小时):").grid(row=5, column=0, sticky=tk.W, pady=2)
+        self.downtime_var = tk.StringVar(value="0.0")
+        ttk.Entry(stats_frame, textvariable=self.downtime_var, width=20).grid(row=5, column=1, pady=2)
+        
+        ttk.Label(stats_frame, text="总成本 (元):").grid(row=6, column=0, sticky=tk.W, pady=2)
+        self.total_cost_var = tk.StringVar(value="0.0")
+        ttk.Entry(stats_frame, textvariable=self.total_cost_var, width=20).grid(row=6, column=1, pady=2)
+        
+        ttk.Label(stats_frame, text="平均成本 (元/kWh):").grid(row=7, column=0, sticky=tk.W, pady=2)
+        self.avg_cost_var = tk.StringVar(value="0.0")
+        ttk.Entry(stats_frame, textvariable=self.avg_cost_var, width=20).grid(row=7, column=1, pady=2)
+        
+        # 时间范围选择区域
+        time_range_frame = ttk.LabelFrame(tab, text="时间范围", padding="10")
+        time_range_frame.grid(row=1, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
+        
+        ttk.Label(time_range_frame, text="开始时间:").grid(row=0, column=0, sticky=tk.W, pady=2)
+        self.start_time_var = tk.StringVar(value="2023-01-01 00:00:00")
+        ttk.Entry(time_range_frame, textvariable=self.start_time_var, width=20).grid(row=0, column=1, pady=2)
+        
+        ttk.Label(time_range_frame, text="结束时间:").grid(row=1, column=0, sticky=tk.W, pady=2)
+        self.end_time_var = tk.StringVar(value="2023-12-31 23:59:59")
+        ttk.Entry(time_range_frame, textvariable=self.end_time_var, width=20).grid(row=1, column=1, pady=2)
+        
+        # 图表区域
+        plot_frame = ttk.Frame(tab)
+        plot_frame.grid(row=2, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
+        
+        self.data_figure = Figure(figsize=(10, 6), dpi=100)  # 增加高度
+        self.data_ax = self.data_figure.add_subplot(111)
+        self.data_canvas = FigureCanvasTkAgg(self.data_figure, plot_frame)
+        self.data_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+        
+        # 配置权重
+        tab.columnconfigure(0, weight=1)
+        tab.rowconfigure(8, weight=1)  # 给图表区域分配更多空间
+        stats_frame.columnconfigure(0, weight=1)
+        stats_frame.rowconfigure(0, weight=1)
+        time_range_frame.columnconfigure(5, weight=1)
+        plot_frame.columnconfigure(0, weight=1)
+        plot_frame.rowconfigure(0, weight=1)
+
+    def create_function_settings_tab(self, notebook):
+        tab = ttk.Frame(notebook, padding="10")
+        notebook.add(tab, text="⚙️ 机组设置")  # 修改标签名称为"设置"并添加齿轮图标
+        
+        # 按钮区域（放在同一行）
+        buttons_frame = ttk.Frame(tab)
+        buttons_frame.grid(row=0, column=0, columnspan=2, sticky=tk.E, padx=5, pady=5)
+        
+        # 保存函数参数按钮
+        save_params_btn = ttk.Button(buttons_frame, text="保存函数参数", command=self.save_function_parameters)
+        save_params_btn.pack(side=tk.RIGHT, padx=5)
+        
+        # 保存并返回项目列表按钮
+        back_btn = ttk.Button(buttons_frame, text="保存并返回项目列表", command=self.save_and_return_to_project_list)
+        back_btn.pack(side=tk.RIGHT, padx=5)
+        
+        # 负荷设置区域
+        load_frame = ttk.LabelFrame(tab, text="负荷设置", padding="10")
+        load_frame.grid(row=1, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
+        
+        ttk.Label(load_frame, text="最大电力负荷 (kW):").grid(row=0, column=0, sticky=tk.W, pady=2)
+        self.max_load_var = tk.DoubleVar(value=self.data_model.max_electric_load)  # 使用数据模型中的值
+        ttk.Entry(load_frame, textvariable=self.max_load_var, width=20).grid(row=0, column=1, pady=2)
+        
+        ttk.Label(load_frame, text="最大灵活负荷 (kW):").grid(row=1, column=0, sticky=tk.W, pady=2)
+        self.flexible_load_max_var = tk.DoubleVar(value=self.data_model.flexible_load_max)  # 使用数据模型中的值
+        ttk.Entry(load_frame, textvariable=self.flexible_load_max_var, width=20).grid(row=1, column=1, pady=2)
+        
+        ttk.Label(load_frame, text="最小灵活负荷 (kW):").grid(row=2, column=0, sticky=tk.W, pady=2)
+        self.flexible_load_min_var = tk.DoubleVar(value=self.data_model.flexible_load_min)  # 使用数据模型中的值
+        ttk.Entry(load_frame, textvariable=self.flexible_load_min_var, width=20).grid(row=2, column=1, pady=2)
+        
+        # 风机和光伏型号管理区域（放在同一行）
+        models_frame = ttk.Frame(tab)
+        models_frame.grid(row=2, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(0, 20))
+        
+    def create_function_data_tab(self, notebook):
+        tab = ttk.Frame(notebook, padding="10")
+        notebook.add(tab, text="📊 数据导入")  # 修改为正确的标签名称
+        
+        # 统计信息区域
+        stats_frame = ttk.LabelFrame(tab, text="统计信息", padding="10")
+        stats_frame.grid(row=0, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
+        
+        ttk.Label(stats_frame, text="总电力消耗 (kWh):").grid(row=0, column=0, sticky=tk.W, pady=2)
+        self.total_consumption_var = tk.StringVar(value="0.0")
+        ttk.Entry(stats_frame, textvariable=self.total_consumption_var, width=20).grid(row=0, column=1, pady=2)
+        
+        ttk.Label(stats_frame, text="平均电力负荷 (kW):").grid(row=1, column=0, sticky=tk.W, pady=2)
+        self.avg_load_var = tk.StringVar(value="0.0")
+        ttk.Entry(stats_frame, textvariable=self.avg_load_var, width=20).grid(row=1, column=1, pady=2)
+        
+        ttk.Label(stats_frame, text="最大电力负荷 (kW):").grid(row=2, column=0, sticky=tk.W, pady=2)
+        self.max_load_var = tk.StringVar(value="0.0")
+        ttk.Entry(stats_frame, textvariable=self.max_load_var, width=20).grid(row=2, column=1, pady=2)
+        
+        ttk.Label(stats_frame, text="最小电力负荷 (kW):").grid(row=3, column=0, sticky=tk.W, pady=2)
+        self.min_load_var = tk.StringVar(value="0.0")
+        ttk.Entry(stats_frame, textvariable=self.min_load_var, width=20).grid(row=3, column=1, pady=2)
+        
+        ttk.Label(stats_frame, text="运行时间 (小时):").grid(row=4, column=0, sticky=tk.W, pady=2)
+        self.runtime_var = tk.StringVar(value="0.0")
+        ttk.Entry(stats_frame, textvariable=self.runtime_var, width=20).grid(row=4, column=1, pady=2)
+        
+        ttk.Label(stats_frame, text="停机时间 (小时):").grid(row=5, column=0, sticky=tk.W, pady=2)
+        self.downtime_var = tk.StringVar(value="0.0")
+        ttk.Entry(stats_frame, textvariable=self.downtime_var, width=20).grid(row=5, column=1, pady=2)
+        
+        ttk.Label(stats_frame, text="总成本 (元):").grid(row=6, column=0, sticky=tk.W, pady=2)
+        self.total_cost_var = tk.StringVar(value="0.0")
+        ttk.Entry(stats_frame, textvariable=self.total_cost_var, width=20).grid(row=6, column=1, pady=2)
+        
+        ttk.Label(stats_frame, text="平均成本 (元/kWh):").grid(row=7, column=0, sticky=tk.W, pady=2)
+        self.avg_cost_var = tk.StringVar(value="0.0")
+        ttk.Entry(stats_frame, textvariable=self.avg_cost_var, width=20).grid(row=7, column=1, pady=2)
+        
+        # 时间范围选择区域
+        time_range_frame = ttk.LabelFrame(tab, text="时间范围", padding="10")
+        time_range_frame.grid(row=1, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
+        
+        ttk.Label(time_range_frame, text="开始时间:").grid(row=0, column=0, sticky=tk.W, pady=2)
+        self.start_time_var = tk.StringVar(value="2023-01-01 00:00:00")
+        ttk.Entry(time_range_frame, textvariable=self.start_time_var, width=20).grid(row=0, column=1, pady=2)
+        
+        ttk.Label(time_range_frame, text="结束时间:").grid(row=1, column=0, sticky=tk.W, pady=2)
+        self.end_time_var = tk.StringVar(value="2023-12-31 23:59:59")
+        ttk.Entry(time_range_frame, textvariable=self.end_time_var, width=20).grid(row=1, column=1, pady=2)
+        
+        # 图表区域
+        plot_frame = ttk.Frame(tab)
+        plot_frame.grid(row=2, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
+        
+        self.data_figure = Figure(figsize=(10, 6), dpi=100)  # 增加高度
+        self.data_ax = self.data_figure.add_subplot(111)
+        self.data_canvas = FigureCanvasTkAgg(self.data_figure, plot_frame)
+        self.data_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+        
+        # 配置权重
+        tab.columnconfigure(0, weight=1)
+        tab.rowconfigure(8, weight=1)  # 给图表区域分配更多空间
+        stats_frame.columnconfigure(0, weight=1)
+        stats_frame.rowconfigure(0, weight=1)
+        time_range_frame.columnconfigure(5, weight=1)
+        plot_frame.columnconfigure(0, weight=1)
+        plot_frame.rowconfigure(0, weight=1)
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
         
     def create_function_settings_tab(self, notebook):
         tab = ttk.Frame(notebook, padding="10")
-        notebook.add(tab, text="⚙️ 设置")  # 修改标签名称为"设置"并添加齿轮图标
+        notebook.add(tab, text="⚙️ 机组设置")  # 修改标签名称为"设置"并添加齿轮图标
+        
+        # 按钮区域（放在同一行）
+        buttons_frame = ttk.Frame(tab)
+        buttons_frame.grid(row=0, column=0, columnspan=2, sticky=tk.E, padx=5, pady=5)
+        
+        # 保存函数参数按钮
+        save_params_btn = ttk.Button(buttons_frame, text="保存函数参数", command=self.save_function_parameters)
+        save_params_btn.pack(side=tk.RIGHT, padx=5)
+        
+        # 保存并返回项目列表按钮
+        back_btn = ttk.Button(buttons_frame, text="保存并返回项目列表", command=self.save_and_return_to_project_list)
+        back_btn.pack(side=tk.RIGHT, padx=5)
+        
+    def create_function_data_tab(self, notebook):
+        tab = ttk.Frame(notebook, padding="10")
+        notebook.add(tab, text="📊 数据导入")  # 修改为正确的标签名称
+        
+        # 统计信息区域
+        stats_frame = ttk.LabelFrame(tab, text="统计信息", padding="10")
+        stats_frame.grid(row=0, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
+        
+        ttk.Label(stats_frame, text="总电力消耗 (kWh):").grid(row=0, column=0, sticky=tk.W, pady=2)
+        self.total_consumption_var = tk.StringVar(value="0.0")
+        ttk.Entry(stats_frame, textvariable=self.total_consumption_var, width=20).grid(row=0, column=1, pady=2)
+        
+        ttk.Label(stats_frame, text="平均电力负荷 (kW):").grid(row=1, column=0, sticky=tk.W, pady=2)
+        self.avg_load_var = tk.StringVar(value="0.0")
+        ttk.Entry(stats_frame, textvariable=self.avg_load_var, width=20).grid(row=1, column=1, pady=2)
+        
+        ttk.Label(stats_frame, text="最大电力负荷 (kW):").grid(row=2, column=0, sticky=tk.W, pady=2)
+        self.max_load_var = tk.StringVar(value="0.0")
+        ttk.Entry(stats_frame, textvariable=self.max_load_var, width=20).grid(row=2, column=1, pady=2)
+        
+        ttk.Label(stats_frame, text="最小电力负荷 (kW):").grid(row=3, column=0, sticky=tk.W, pady=2)
+        self.min_load_var = tk.StringVar(value="0.0")
+        ttk.Entry(stats_frame, textvariable=self.min_load_var, width=20).grid(row=3, column=1, pady=2)
+        
+        ttk.Label(stats_frame, text="运行时间 (小时):").grid(row=4, column=0, sticky=tk.W, pady=2)
+        self.runtime_var = tk.StringVar(value="0.0")
+        ttk.Entry(stats_frame, textvariable=self.runtime_var, width=20).grid(row=4, column=1, pady=2)
+        
+        ttk.Label(stats_frame, text="停机时间 (小时):").grid(row=5, column=0, sticky=tk.W, pady=2)
+        self.downtime_var = tk.StringVar(value="0.0")
+        ttk.Entry(stats_frame, textvariable=self.downtime_var, width=20).grid(row=5, column=1, pady=2)
+        
+        ttk.Label(stats_frame, text="总成本 (元):").grid(row=6, column=0, sticky=tk.W, pady=2)
+        self.total_cost_var = tk.StringVar(value="0.0")
+        ttk.Entry(stats_frame, textvariable=self.total_cost_var, width=20).grid(row=6, column=1, pady=2)
+        
+        stats_frame.rowconfigure(0, weight=1)
+        time_range_frame.columnconfigure(5, weight=1)
+        plot_frame.columnconfigure(0, weight=1)
+        plot_frame.rowconfigure(0, weight=1)
+        
+    def create_function_settings_tab(self, notebook):
+        tab = ttk.Frame(notebook, padding="10")
+        notebook.add(tab, text="⚙️ 机组设置")  # 修改标签名称为"设置"并添加齿轮图标
         
         # 按钮区域（放在同一行）
         buttons_frame = ttk.Frame(tab)
@@ -1841,25 +2167,21 @@ class EnergyBalanceApp:
         self.pv_function_canvas = FigureCanvasTkAgg(self.pv_figure, self.pv_function_frame)
         self.pv_function_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
         
-        # 参数设置区域
-        params_frame = ttk.Frame(tab)
-        params_frame.grid(row=3, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(0, 20))
-        
-        # 热电联产参数设置
-        chp_frame = ttk.LabelFrame(params_frame, text="热电联产电出力函数参数", padding="10")
-        chp_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(0, 10))
+        # 热电联产设置区域
+        chp_frame = ttk.LabelFrame(tab, text="热电联产设置", padding="10")
+        chp_frame.grid(row=3, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(20, 0))
         
         ttk.Label(chp_frame, text="电热比:").grid(row=0, column=0, sticky=tk.W, pady=2)
         self.electric_heat_ratio = tk.DoubleVar(value=self.data_model.chp_electric_params['electric_heat_ratio'])
         ttk.Entry(chp_frame, textvariable=self.electric_heat_ratio, width=20).grid(row=0, column=1, pady=2)
         
-        ttk.Label(chp_frame, text="基础电出力 (kW):").grid(row=1, column=0, sticky=tk.W, pady=2)
+        ttk.Label(chp_frame, text="基础发电量 (kW):").grid(row=1, column=0, sticky=tk.W, pady=2)
         self.base_electric = tk.DoubleVar(value=self.data_model.chp_electric_params['base_electric'])
         ttk.Entry(chp_frame, textvariable=self.base_electric, width=20).grid(row=1, column=1, pady=2)
         
-        # 调峰机组参数设置
-        peak_frame = ttk.LabelFrame(params_frame, text="调峰机组参数", padding="10")
-        peak_frame.grid(row=0, column=1, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(0, 10), padx=(10, 0))
+        # 调峰机组设置区域
+        peak_frame = ttk.LabelFrame(tab, text="调峰机组设置", padding="10")
+        peak_frame.grid(row=4, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(20, 0))
         
         ttk.Label(peak_frame, text="调峰机组最大出力 (kW):").grid(row=0, column=0, sticky=tk.W, pady=2)
         self.peak_power_max = tk.DoubleVar(value=self.data_model.peak_power_max)
@@ -1880,10 +2202,6 @@ class EnergyBalanceApp:
         models_frame.columnconfigure(0, weight=1)
         models_frame.columnconfigure(1, weight=1)
         models_frame.rowconfigure(0, weight=1)
-        wind_models_frame.columnconfigure(2, weight=1)
-        pv_models_frame.columnconfigure(2, weight=1)
-        params_frame.columnconfigure(0, weight=1)
-        params_frame.columnconfigure(1, weight=1)
         
         # 初始化风机和光伏型号列表
         self.root.after(100, self.refresh_wind_model_list)
@@ -2376,7 +2694,7 @@ class EnergyBalanceApp:
 
     def create_calculation_tab(self, notebook):
         tab = ttk.Frame(notebook, padding="10")
-        notebook.add(tab, text="📈 结果")  # 添加结果图标
+        notebook.add(tab, text="📈 平衡计算")  # 添加结果图标
         
         # 添加返回项目列表按钮
         back_btn = ttk.Button(tab, text="保存并返回项目列表", command=self.save_and_return_to_project_list)
@@ -3666,7 +3984,7 @@ class EnergyBalanceApp:
         创建检修和投产计划标签页
         """
         tab = ttk.Frame(notebook, padding="10")
-        notebook.add(tab, text="🔧 检修和投产计划")  # 添加扳手图标
+        notebook.add(tab, text="🔧 检修投产")  # 添加扳手图标
         
         # 添加返回项目列表按钮
         back_btn = ttk.Button(tab, text="保存并返回项目列表", command=self.save_and_return_to_project_list)
@@ -3782,6 +4100,146 @@ class EnergyBalanceApp:
         commissioning_frame.rowconfigure(0, weight=1)
         output_limit_frame.columnconfigure(0, weight=1)
         output_limit_frame.rowconfigure(0, weight=1)
+
+    def create_optimization_tab(self, notebook):
+        """
+        创建优化标签页
+        """
+        tab = ttk.Frame(notebook, padding="10")
+        notebook.add(tab, text="⚖️ 优化分析")  # 添加优化图标
+        
+        # 添加返回项目列表按钮
+        back_btn = ttk.Button(tab, text="保存并返回项目列表", command=self.save_and_return_to_project_list)
+        back_btn.grid(row=0, column=0, sticky=tk.E, padx=5, pady=5)
+        
+        # 优化参数设置区域
+        params_frame = ttk.LabelFrame(tab, text="优化参数设置", padding="10")
+        params_frame.grid(row=1, column=0, sticky=(tk.W, tk.E), pady=(0, 20))
+        
+        # 基础负荷单位收益
+        ttk.Label(params_frame, text="基础负荷单位收益 (元/kWh): ").grid(row=0, column=0, sticky=tk.W, pady=5)
+        self.basic_load_revenue = tk.DoubleVar(value=1.0)  # 默认值：1
+        ttk.Entry(params_frame, textvariable=self.basic_load_revenue, width=20).grid(row=0, column=1, sticky=tk.W, padx=5)
+        
+        # 灵活负荷单位收益
+        ttk.Label(params_frame, text="灵活负荷单位收益 (元/kWh): ").grid(row=1, column=0, sticky=tk.W, pady=5)
+        self.flexible_load_revenue = tk.DoubleVar(value=0.8)  # 默认值：0.8
+        ttk.Entry(params_frame, textvariable=self.flexible_load_revenue, width=20).grid(row=1, column=1, sticky=tk.W, padx=5)
+        
+        # 火电发电单位成本
+        ttk.Label(params_frame, text="火电发电单位成本 (元/kWh): ").grid(row=2, column=0, sticky=tk.W, pady=5)
+        self.thermal_cost = tk.DoubleVar(value=0.2)  # 默认值：0.2
+        ttk.Entry(params_frame, textvariable=self.thermal_cost, width=20).grid(row=2, column=1, sticky=tk.W, padx=5)
+        
+        # 光伏发电单位成本
+        ttk.Label(params_frame, text="光伏发电单位成本 (元/kWh): ").grid(row=3, column=0, sticky=tk.W, pady=5)
+        self.pv_cost = tk.DoubleVar(value=0.05)  # 默认值：0.05
+        ttk.Entry(params_frame, textvariable=self.pv_cost, width=20).grid(row=3, column=1, sticky=tk.W, padx=5)
+        
+        # 风机发电单位成本
+        ttk.Label(params_frame, text="风机发电单位成本 (元/kWh): ").grid(row=4, column=0, sticky=tk.W, pady=5)
+        self.wind_cost = tk.DoubleVar(value=0.05)  # 默认值：0.05
+        ttk.Entry(params_frame, textvariable=self.wind_cost, width=20).grid(row=4, column=1, sticky=tk.W, padx=5)
+        
+        # 优化控制按钮
+        control_frame = ttk.Frame(tab)
+        control_frame.grid(row=2, column=0, sticky=(tk.W, tk.E), pady=5)
+        
+        ttk.Button(control_frame, text="开始优化计算", command=self.start_optimization).grid(row=0, column=0, padx=5, pady=10)
+        ttk.Button(control_frame, text="导出优化结果", command=self.export_optimization_results).grid(row=0, column=1, padx=5, pady=10)
+        
+        # 优化结果显示
+        result_frame = ttk.LabelFrame(tab, text="优化结果", padding="10")
+        result_frame.grid(row=3, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=5)
+        
+        self.optimization_result_text = tk.Text(result_frame, height=15, width=80)
+        scrollbar = ttk.Scrollbar(result_frame, orient=tk.VERTICAL, command=self.optimization_result_text.yview)
+        self.optimization_result_text.configure(yscrollcommand=scrollbar.set)
+        
+        self.optimization_result_text.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
+        
+        # 配置权重
+        tab.columnconfigure(0, weight=1)
+        tab.rowconfigure(3, weight=1)
+        params_frame.columnconfigure(1, weight=1)
+        result_frame.columnconfigure(0, weight=1)
+        result_frame.rowconfigure(0, weight=1)
+
+    def start_optimization(self):
+        """
+        开始优化计算
+        """
+        # 获取当前设置的参数
+        basic_load_revenue = self.basic_load_revenue.get()
+        flexible_load_revenue = self.flexible_load_revenue.get()
+        thermal_cost = self.thermal_cost.get()
+        pv_cost = self.pv_cost.get()
+        wind_cost = self.wind_cost.get()
+        
+        # 检查是否有计算结果可供优化
+        if not self.results:
+            messagebox.showwarning("警告", "请先进行年度平衡计算，再进行优化！")
+            return
+        
+        # 这里可以添加具体的优化算法
+        # 暂时显示参数信息和提示
+        result_text = f"""优化计算参数:
+
+基础负荷单位收益: {basic_load_revenue} 元/kWh
+灵活负荷单位收益: {flexible_load_revenue} 元/kWh
+火电发电单位成本: {thermal_cost} 元/kWh
+光伏发电单位成本: {pv_cost} 元/kWh
+风机发电单位成本: {wind_cost} 元/kWh
+
+系统已准备好进行优化计算。
+
+优化目标: 每个小时的收益最大
+收益 = 基础负荷 × 基础负荷单位收益 + 灵活负荷 × 灵活负荷单位收益 - 火力发电负荷 × 火电发电单位成本 - 光伏发电负荷 × 光伏发电单位成本 - 风机发电负荷 × 风机发电单位成本 - 下网负荷 × 下网电价
+
+约束条件:
+- 最大基础负荷，最小基础负荷
+- 最大灵活负荷，最小灵活负荷
+- 下网负荷 >= 0
+
+当前系统已具备优化所需的所有数据，但具体优化算法有待实现。
+"""
+        
+        self.optimization_result_text.delete(1.0, tk.END)
+        self.optimization_result_text.insert(tk.END, result_text)
+        
+        messagebox.showinfo("提示", "优化计算功能已激活，具体优化算法需要进一步开发实现。")
+        
+    def export_optimization_results(self):
+        """
+        导出优化结果
+        """
+        if not hasattr(self, 'optimization_result_text'):
+            messagebox.showwarning("警告", "优化结果为空，无法导出！")
+            return
+        
+        # 获取优化结果显示的内容
+        result_content = self.optimization_result_text.get(1.0, tk.END)
+        
+        if result_content.strip() == "":
+            messagebox.showwarning("警告", "优化结果为空，无法导出！")
+            return
+        
+        # 询问用户保存位置
+        save_path = filedialog.asksaveasfilename(
+            title="保存优化结果",
+            defaultextension=".txt",
+            filetypes=[("Text files", "*.txt"), ("All files", "*.*")],
+            initialfile="optimization_results.txt"
+        )
+        
+        if save_path:
+            try:
+                with open(save_path, 'w', encoding='utf-8') as f:
+                    f.write(result_content)
+                messagebox.showinfo("成功", f"优化结果已导出至:\n{save_path}")
+            except Exception as e:
+                messagebox.showerror("错误", f"导出优化结果失败:\n{str(e)}")
         
     def add_maintenance_entry(self):
         """
