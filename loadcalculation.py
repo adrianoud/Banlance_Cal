@@ -4179,6 +4179,9 @@ class EnergyBalanceApp:
         """
         开始优化计算
         """
+        import numpy as np
+        from scipy.optimize import minimize_scalar
+        
         # 获取当前设置的参数
         basic_load_revenue = self.basic_load_revenue.get()
         flexible_load_revenue = self.flexible_load_revenue.get()
@@ -4191,62 +4194,286 @@ class EnergyBalanceApp:
             messagebox.showwarning("警告", "请先进行年度平衡计算，再进行优化！")
             return
         
-        # 这里可以添加具体的优化算法
-        # 暂时显示参数信息和提示
-        result_text = f"""优化计算参数:
+        # 获取电价数据，使用导入的下网电价，如果没有则默认为0
+        grid_price = self.data_model.grid_purchase_price_hourly
+        
+        # 创建优化后的结果字典
+        optimized_results = {
+            'hourly_basic_load': [0.0] * 8760,      # 基础负荷优化值
+            'hourly_flexible_load': [0.0] * 8760,  # 灵活负荷优化值
+            'hourly_revenue': [0.0] * 8760,        # 每小时收益
+            'total_revenue': 0.0                     # 总收益
+        }
+        
+        # 执行逐小时优化
+        total_revenue = 0.0
+        
+        # 预计算可能重复使用的值
+        from datetime import datetime, timedelta
+        base_date = datetime(2024, 1, 1)
+        
+        for hour in range(8760):
+            # 获取平衡计算得到的电力负荷（考虑检修和投运计划修正后）作为基础负荷的最大值
+            max_basic_load = self.results['hourly_corrected_electric_load'][hour]
+            
+            # 获取当前小时的其他参数（来自平衡计算结果）
+            chp_output = self.results['hourly_chp_output'][hour]
+            pv_output = self.results['hourly_pv_output'][hour]
+            wind_output = self.results['hourly_wind_output'][hour]
+            
+            # 当前小时的约束条件
+            max_flexible_load = self.data_model.flexible_load_max
+            min_flexible_load = self.data_model.flexible_load_min
+            
+            # 获取当前小时的日期信息
+            current_date = base_date + timedelta(hours=hour)
+            current_month = current_date.month
+            
+            # 获取当前小时的活动检修计划和投产计划
+            calculator = self.calculator  # 获取计算器实例以使用其方法
+            active_maintenance_schedules = calculator.get_active_maintenance_schedules(hour)
+            active_commissioning_schedules = calculator.get_active_commissioning_schedules(hour)
+            
+            # 预先计算修正后的调峰机组参数
+            current_peak_power_max = self.data_model.peak_power_max
+            if 5 <= current_month <= 9:  # 夏季
+                current_peak_power_min = self.data_model.peak_power_min_summer
+            else:  # 冬季
+                current_peak_power_min = self.data_model.peak_power_min_winter
+            
+            # 应用检修计划对调峰机组参数的修正
+            for schedule in active_maintenance_schedules:
+                power_type = schedule.get('power_type', '')
+                power_size = schedule.get('power_size', 0.0)
+                
+                if power_type == '调峰机组出力':
+                    # 检修计划影响调峰机组出力
+                    current_peak_power_max = current_peak_power_max - power_size
+                    # 根据经验教训，检修计划影响调峰机组出力时，需同时降低最大出力，并按比例调整最小出力
+                    original_peak_power_max = self.data_model.peak_power_max
+                    if original_peak_power_max > 0:
+                        # 按比例调整最小出力
+                        if 5 <= current_month <= 9:  # 夏季
+                            current_peak_power_min = self.data_model.peak_power_min_summer * (current_peak_power_max / original_peak_power_max)
+                        else:  # 冬季
+                            current_peak_power_min = self.data_model.peak_power_min_winter * (current_peak_power_max / original_peak_power_max)
+            
+            # 应用投产计划对调峰机组参数的修正
+            for schedule in active_commissioning_schedules:
+                power_type = schedule.get('power_type', '')
+                power_size = schedule.get('power_size', 0.0)
+                start_date = schedule.get('start_date', '')
+                end_date = schedule.get('end_date', '')
+                
+                # 计算线性插值因子
+                interpolation_factor = calculator.calculate_interpolation_factor(hour, start_date, end_date)
+                
+                if power_type == '调峰机组最大出力':
+                    # 投产计划对调峰机组最大出力的影响
+                    adjusted_power_size = power_size * interpolation_factor
+                    current_peak_power_max = current_peak_power_max - (power_size - adjusted_power_size)
+                elif power_type == '调峰机组夏季最小出力':
+                    # 投产计划对调峰机组夏季最小出力的影响
+                    adjusted_power_size = power_size * interpolation_factor
+                    if 5 <= current_month <= 9:  # 夏季：5-9月
+                        current_peak_power_min = self.data_model.peak_power_min_summer - adjusted_power_size
+                elif power_type == '调峰机组冬季最小出力':
+                    # 投产计划对调峰机组冬季最小出力的影响
+                    adjusted_power_size = power_size * interpolation_factor
+                    if current_date.month < 5 or current_date.month > 9:  # 冬季：10-12月和1-4月
+                        current_peak_power_min = self.data_model.peak_power_min_winter - adjusted_power_size
+                elif power_type == '调峰机组最小出力':
+                    # 为了向后兼容，仍然支持原有的调峰机组最小出力设置
+                    adjusted_power_size = power_size * interpolation_factor
+                    if 5 <= current_month <= 9:  # 夏季
+                        current_peak_power_min = self.data_model.peak_power_min_summer - adjusted_power_size
+                    else:  # 冬季
+                        current_peak_power_min = self.data_model.peak_power_min_winter - adjusted_power_size
+            
+            # 定义收益计算函数
+            def calculate_revenue(basic_load, flexible_load):
+                # 计算当前负荷组合下的总负荷
+                total_load = basic_load + flexible_load
+                
+                # 计算火电出力（热电联产+调峰）
+                peak_pending = total_load - chp_output - pv_output - wind_output
+                
+                # 调峰机组出力
+                peak_output = max(min(peak_pending, current_peak_power_max), current_peak_power_min)
+                
+                # 火电出力
+                thermal_output = chp_output + peak_output
+                
+                # 计算下网负荷
+                generation = pv_output + wind_output + thermal_output
+                grid_load = total_load - generation
+                
+                # 计算收益
+                revenue = (
+                    basic_load * basic_load_revenue + 
+                    flexible_load * flexible_load_revenue - 
+                    thermal_output * thermal_cost - 
+                    pv_output * pv_cost - 
+                    wind_output * wind_cost
+                )
+                
+                # 如果需要购电，减去购电成本
+                if grid_load > 0:
+                    revenue -= grid_load * grid_price[hour] if hour < len(grid_price) else 0
+                
+                return revenue
+            
+            # 为了优化性能，我们不使用双重优化，而是分析经济性来确定最优策略
+            # 如果基础负荷收益 > 火电成本，且基础负荷收益 > 灵活负荷收益，则尽可能使用基础负荷
+            # 如果灵活负荷收益 > 火电成本，则使用灵活负荷
+            
+            best_revenue = float('-inf')
+            best_basic_load = 0
+            best_flexible_load = 0
+            
+            # 测试几种策略
+            strategies = [
+                (0, 0),  # 最小值
+                (max_basic_load, min_flexible_load),  # 基础负荷最大，灵活负荷最小
+                (0, max_flexible_load),  # 基础负荷最小，灵活负荷最大
+                (max_basic_load, max_flexible_load),  # 最大值
+            ]
+            
+            # 评估每种策略
+            for basic_test, flex_test in strategies:
+                revenue = calculate_revenue(basic_test, flex_test)
+                if revenue > best_revenue:
+                    best_revenue = revenue
+                    best_basic_load = basic_test
+                    best_flexible_load = flex_test
+            
+            # 简单线性搜索优化
+            # 以较粗粒度搜索可能的组合
+            basic_step = max_basic_load / 10 if max_basic_load > 0 else 0
+            flex_step = (max_flexible_load - min_flexible_load) / 10 if (max_flexible_load - min_flexible_load) > 0 else 0
+            
+            for i in range(11):  # 0到10，共11个点
+                basic_load = min(i * basic_step, max_basic_load)
+                for j in range(11):  # 0到10，共11个点
+                    flexible_load = min(min_flexible_load + j * flex_step, max_flexible_load)
+                    revenue = calculate_revenue(basic_load, flexible_load)
+                    if revenue > best_revenue:
+                        best_revenue = revenue
+                        best_basic_load = basic_load
+                        best_flexible_load = flexible_load
+            
+            # 存储优化结果
+            optimized_results['hourly_basic_load'][hour] = best_basic_load
+            optimized_results['hourly_flexible_load'][hour] = best_flexible_load
+            optimized_results['hourly_revenue'][hour] = best_revenue
+            
+            total_revenue += best_revenue
+        
+        optimized_results['total_revenue'] = total_revenue
+        
+        # 将优化结果存储到实例变量中
+        self.optimized_results = optimized_results
+        
+        # 显示优化结果摘要
+        avg_basic_load = np.mean(optimized_results['hourly_basic_load'])
+        avg_flexible_load = np.mean(optimized_results['hourly_flexible_load'])
+        
+        result_text = f"""优化计算完成!
 
+优化参数:
 基础负荷单位收益: {basic_load_revenue} 元/kWh
 灵活负荷单位收益: {flexible_load_revenue} 元/kWh
 火电发电单位成本: {thermal_cost} 元/kWh
 光伏发电单位成本: {pv_cost} 元/kWh
 风机发电单位成本: {wind_cost} 元/kWh
 
-系统已准备好进行优化计算。
+优化结果:
+总收益: {total_revenue:,.2f} 元
+平均每小时收益: {total_revenue/8760:.2f} 元
 
-优化目标: 每个小时的收益最大
-收益 = 基础负荷 × 基础负荷单位收益 + 灵活负荷 × 灵活负荷单位收益 - 火力发电负荷 × 火电发电单位成本 - 光伏发电负荷 × 光伏发电单位成本 - 风机发电负荷 × 风机发电单位成本 - 下网负荷 × 下网电价
+基础负荷:
+  平均值: {avg_basic_load:.2f} kW
+  范围: {min(optimized_results['hourly_basic_load']):.2f} - {max(optimized_results['hourly_basic_load']):.2f} kW
 
-约束条件:
-- 最大基础负荷，最小基础负荷
-- 最大灵活负荷，最小灵活负荷
-- 下网负荷 >= 0
+灵活负荷:
+  平均值: {avg_flexible_load:.2f} kW
+  范围: {min(optimized_results['hourly_flexible_load']):.2f} - {max(optimized_results['hourly_flexible_load']):.2f} kW
 
-当前系统已具备优化所需的所有数据，但具体优化算法有待实现。
-"""
-        
+说明:
+- 优化目标为每小时收益最大化
+- 基础负荷约束在 [0, 平衡计算得到的电力负荷（考虑了检修和投运计划修正）]
+- 灵活负荷约束在 [最小灵活负荷, 最大灵活负荷]
+- 收益 = 基础负荷×基础收益 + 灵活负荷×灵活收益 - 火电出力×火电成本 - 光伏出力×光伏成本 - 风机出力×风机成本 - 购电×电价"""        
         self.optimization_result_text.delete(1.0, tk.END)
         self.optimization_result_text.insert(tk.END, result_text)
         
-        messagebox.showinfo("提示", "优化计算功能已激活，具体优化算法需要进一步开发实现。")
+        # 保存优化结果到当前项目
+        self.save_current_project()
         
     def export_optimization_results(self):
         """
         导出优化结果
         """
-        if not hasattr(self, 'optimization_result_text'):
-            messagebox.showwarning("警告", "优化结果为空，无法导出！")
-            return
-        
-        # 获取优化结果显示的内容
-        result_content = self.optimization_result_text.get(1.0, tk.END)
-        
-        if result_content.strip() == "":
+        if not hasattr(self, 'optimized_results'):
             messagebox.showwarning("警告", "优化结果为空，无法导出！")
             return
         
         # 询问用户保存位置
         save_path = filedialog.asksaveasfilename(
             title="保存优化结果",
-            defaultextension=".txt",
-            filetypes=[("Text files", "*.txt"), ("All files", "*.*")],
-            initialfile="optimization_results.txt"
+            defaultextension=".xlsx",
+            filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")],
+            initialfile="optimized_results.xlsx"
         )
         
         if save_path:
             try:
-                with open(save_path, 'w', encoding='utf-8') as f:
-                    f.write(result_content)
+                import pandas as pd
+                from datetime import datetime, timedelta
+                
+                # 创建时间戳列表
+                base_date = datetime(2025, 1, 1)
+                time_stamps = [(base_date + timedelta(hours=i)).strftime("%Y-%m-%d %H:%M") for i in range(8760)]
+                
+                # 创建DataFrame
+                df = pd.DataFrame({
+                    '时间': time_stamps,
+                    '基础负荷优化值(kW)': self.optimized_results['hourly_basic_load'],
+                    '灵活负荷优化值(kW)': self.optimized_results['hourly_flexible_load'],
+                    '每小时收益(元)': self.optimized_results['hourly_revenue']
+                })
+                
+                # 导出到Excel
+                with pd.ExcelWriter(save_path, engine='openpyxl') as writer:
+                    df.to_excel(writer, sheet_name='优化结果', index=False)
+                    
+                    # 添加汇总信息工作表
+                    summary_data = [
+                        ['项目', '值'],
+                        ['总收益(元)', f'{self.optimized_results["total_revenue"]:.2f}'],
+                        ['平均每小时收益(元)', f'{self.optimized_results["total_revenue"] / 8760:.2f}'],
+                        ['基础负荷平均值(kW)', f'{sum(self.optimized_results["hourly_basic_load"]) / 8760:.2f}'],
+                        ['灵活负荷平均值(kW)', f'{sum(self.optimized_results["hourly_flexible_load"]) / 8760:.2f}'],
+                        ['基础负荷总计(kWh)', f'{sum(self.optimized_results["hourly_basic_load"]):.2f}'],
+                        ['灵活负荷总计(kWh)', f'{sum(self.optimized_results["hourly_flexible_load"]):.2f}']
+                    ]
+                    
+                    summary_df = pd.DataFrame(summary_data)
+                    summary_df.to_excel(writer, sheet_name='汇总信息', index=False, header=False)
+                
                 messagebox.showinfo("成功", f"优化结果已导出至:\n{save_path}")
+            except ImportError:
+                # 如果pandas不可用，使用文本格式导出
+                txt_save_path = save_path.replace('.xlsx', '.txt')
+                with open(txt_save_path, 'w', encoding='utf-8') as f:
+                    f.write("优化结果\n\n")
+                    f.write(f"总收益: {self.optimized_results['total_revenue']:.2f} 元\n")
+                    f.write(f"平均每小时收益: {self.optimized_results['total_revenue']/8760:.2f} 元\n\n")
+                    f.write("每小时优化结果 (前10小时示例):\n")
+                    f.write("小时,基础负荷优化值(kW),灵活负荷优化值(kW),每小时收益(元)\n")
+                    for i in range(min(10, 8760)):
+                        f.write(f"{i},{self.optimized_results['hourly_basic_load'][i]:.2f},{self.optimized_results['hourly_flexible_load'][i]:.2f},{self.optimized_results['hourly_revenue'][i]:.2f}\n")
+                messagebox.showinfo("成功", f"优化结果已导出至:\n{txt_save_path} (由于缺少pandas库，以文本格式导出)")
             except Exception as e:
                 messagebox.showerror("错误", f"导出优化结果失败:\n{str(e)}")
         
