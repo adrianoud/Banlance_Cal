@@ -2167,9 +2167,13 @@ class EnergyBalanceApp:
         self.pv_function_canvas = FigureCanvasTkAgg(self.pv_figure, self.pv_function_frame)
         self.pv_function_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
         
+        # 创建一个主框架来容纳热电联产和调峰机组设置
+        settings_main_frame = ttk.Frame(tab)
+        settings_main_frame.grid(row=3, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(20, 0))
+        
         # 热电联产设置区域
-        chp_frame = ttk.LabelFrame(tab, text="热电联产设置", padding="10")
-        chp_frame.grid(row=3, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(20, 0))
+        chp_frame = ttk.LabelFrame(settings_main_frame, text="热电联产设置", padding="10")
+        chp_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(0, 10))
         
         ttk.Label(chp_frame, text="电热比:").grid(row=0, column=0, sticky=tk.W, pady=2)
         self.electric_heat_ratio = tk.DoubleVar(value=self.data_model.chp_electric_params['electric_heat_ratio'])
@@ -2180,8 +2184,8 @@ class EnergyBalanceApp:
         ttk.Entry(chp_frame, textvariable=self.base_electric, width=20).grid(row=1, column=1, pady=2)
         
         # 调峰机组设置区域
-        peak_frame = ttk.LabelFrame(tab, text="调峰机组设置", padding="10")
-        peak_frame.grid(row=4, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(20, 0))
+        peak_frame = ttk.LabelFrame(settings_main_frame, text="调峰机组设置", padding="10")
+        peak_frame.grid(row=0, column=1, sticky=(tk.W, tk.E, tk.N, tk.S))
         
         ttk.Label(peak_frame, text="调峰机组最大出力 (kW):").grid(row=0, column=0, sticky=tk.W, pady=2)
         self.peak_power_max = tk.DoubleVar(value=self.data_model.peak_power_max)
@@ -2194,6 +2198,11 @@ class EnergyBalanceApp:
         ttk.Label(peak_frame, text="调峰机组冬季最小出力 (kW):").grid(row=2, column=0, sticky=tk.W, pady=2)
         self.peak_power_min_winter = tk.DoubleVar(value=self.data_model.peak_power_min_winter)
         ttk.Entry(peak_frame, textvariable=self.peak_power_min_winter, width=20).grid(row=2, column=1, pady=2)
+        
+        # 配置权重，使两个设置区域平分空间
+        settings_main_frame.columnconfigure(0, weight=1)
+        settings_main_frame.columnconfigure(1, weight=1)
+        settings_main_frame.rowconfigure(0, weight=1)
         
         # 配置权重
         tab.columnconfigure(0, weight=1)

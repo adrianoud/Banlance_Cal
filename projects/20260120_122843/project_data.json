@@ -43817,7 +43817,20 @@
     "wind": true,
     "grid_price": true
   },
-  "wind_turbine_models": [],
+  "wind_turbine_models": [
+    {
+      "name": "新风机型号",
+      "params": {
+        "cut_in_wind": 3.0,
+        "rated_wind": 12.0,
+        "max_rated_wind": 18.0,
+        "cut_out_wind": 25.0,
+        "rated_power": 2000.0
+      },
+      "count": 100,
+      "output_correction_factor": 1.0
+    }
+  ],
   "pv_models": [
     {
       "name": "默认型号",
