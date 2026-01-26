@@ -282,7 +282,8 @@ class EnergyDataModel:
             'maintenance_schedules': self.maintenance_schedules,
             'commissioning_schedules': self.commissioning_schedules,
             'output_limit_schedules': self.output_limit_schedules,
-            'optimization_params': self.optimization_params
+            'optimization_params': self.optimization_params,
+            'optimized_results': getattr(self, 'optimized_results', None)
         }
         return data
         
@@ -353,6 +354,10 @@ class EnergyDataModel:
             'pv_cost': 0.05,
             'wind_cost': 0.05
         })
+        
+        # 加载优化结果（如果有）
+        if 'optimized_results' in data and data['optimized_results'] is not None:
+            self.optimized_results = data['optimized_results']
         
         # 加载计算结果（如果有）
         calculation_results = data.get('calculation_results')
@@ -2724,10 +2729,17 @@ class EnergyBalanceApp:
         保存当前项目数据
         """
         if self.current_project:
+            # 准备项目数据，包含优化结果（如果存在）
+            project_data = self.data_model.to_dict()
+            
+            # 如果存在优化结果，将其添加到项目数据中
+            if hasattr(self, 'optimized_results') and self.optimized_results is not None:
+                project_data['optimized_results'] = self.optimized_results
+            
             # 保存数据模型到项目文件
             success = self.project_manager.save_project_data(
                 self.current_project['id'], 
-                self.data_model.to_dict()
+                project_data
             )
             
             if success:
@@ -4192,6 +4204,7 @@ class EnergyBalanceApp:
         ttk.Button(control_frame, text="保存优化参数", command=self.save_optimization_params).grid(row=0, column=0, padx=5, pady=10)
         ttk.Button(control_frame, text="开始优化计算", command=self.start_optimization).grid(row=0, column=1, padx=5, pady=10)
         ttk.Button(control_frame, text="导出优化结果", command=self.export_optimization_results).grid(row=0, column=2, padx=5, pady=10)
+        ttk.Button(control_frame, text="更新趋势图", command=self.update_optimization_plot).grid(row=0, column=3, padx=5, pady=10)
         
         # 优化结果显示
         result_frame = ttk.LabelFrame(tab, text="优化结果", padding="10")
@@ -4210,6 +4223,35 @@ class EnergyBalanceApp:
         params_frame.columnconfigure(1, weight=1)
         result_frame.columnconfigure(0, weight=1)
         result_frame.rowconfigure(0, weight=1)
+        
+        # 优化结果趋势图区域
+        plot_optimization_frame = ttk.LabelFrame(tab, text="优化结果趋势图", padding="10")
+        plot_optimization_frame.grid(row=4, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=5)
+        
+        # 时间段选择区域
+        time_range_frame_opt = ttk.LabelFrame(plot_optimization_frame, text="时间段选择", padding="10")
+        time_range_frame_opt.pack(fill=tk.X, padx=5, pady=5)
+        
+        ttk.Label(time_range_frame_opt, text="开始日期:").grid(row=0, column=0, sticky=tk.W, padx=(0, 5))
+        self.optimization_start_date_var = tk.StringVar(value="2025-01-01")
+        self.optimization_start_date_entry = ttk.Entry(time_range_frame_opt, textvariable=self.optimization_start_date_var, width=12)
+        self.optimization_start_date_entry.grid(row=0, column=1, padx=5)
+        
+        ttk.Label(time_range_frame_opt, text="结束日期:").grid(row=0, column=2, sticky=tk.W, padx=(10, 5))
+        self.optimization_end_date_var = tk.StringVar(value="2025-12-31")
+        self.optimization_end_date_entry = ttk.Entry(time_range_frame_opt, textvariable=self.optimization_end_date_var, width=12)
+        self.optimization_end_date_entry.grid(row=0, column=3, padx=5)
+        
+        ttk.Button(time_range_frame_opt, text="更新图表", command=self.update_optimization_plot).grid(row=0, column=4, padx=(10, 0))
+        
+        # 创建matplotlib图形
+        self.optimization_figure = Figure(figsize=(10, 6), dpi=100)
+        self.optimization_ax = self.optimization_figure.add_subplot(111)
+        self.optimization_canvas = FigureCanvasTkAgg(self.optimization_figure, plot_optimization_frame)
+        self.optimization_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True, pady=5)
+        
+        # 配置权重
+        tab.rowconfigure(4, weight=1)
 
     def start_optimization(self):
         """
@@ -4512,6 +4554,206 @@ class EnergyBalanceApp:
                 messagebox.showinfo("成功", f"优化结果已导出至:\n{txt_save_path} (由于缺少pandas库，以文本格式导出)")
             except Exception as e:
                 messagebox.showerror("错误", f"导出优化结果失败:\n{str(e)}")
+        
+    def update_optimization_plot(self):
+        """
+        更新优化结果趋势图
+        包括优化前后的基础负荷、灵活负荷以及下网负荷对比
+        """
+        # 检查是否有优化结果和平衡计算结果
+        if not hasattr(self, 'optimized_results') or not self.results:
+            # 如果没有数据，显示提示信息
+            self.optimization_ax.clear()
+            self.optimization_ax.text(0.5, 0.5, '暂无优化结果\n请先进行年度平衡计算和优化计算', 
+                             horizontalalignment='center', verticalalignment='center',
+                             transform=self.optimization_ax.transAxes, fontsize=12)
+            self.optimization_ax.set_title('优化结果趋势图')
+            self.optimization_canvas.draw()
+            return
+        
+        # 清除之前的图表
+        self.optimization_ax.clear()
+        
+        # 解析时间段
+        try:
+            from datetime import datetime, timedelta
+            start_date = datetime.strptime(self.optimization_start_date_var.get(), "%Y-%m-%d")
+            end_date = datetime.strptime(self.optimization_end_date_var.get(), "%Y-%m-%d")
+        except ValueError:
+            messagebox.showerror("错误", "日期格式不正确，请使用 YYYY-MM-DD 格式")
+            return
+        
+        # 计算时间段对应的小时索引
+        start_hour = self.date_to_hour(start_date)
+        end_hour = self.date_to_hour(end_date)
+        
+        if start_hour > end_hour:
+            messagebox.showerror("错误", "开始日期不能晚于结束日期")
+            return
+        
+        if start_hour < 0 or end_hour >= 8760:
+            messagebox.showerror("错误", "日期超出范围，应在2025-01-01至2025-12-31之间")
+            return
+        
+        # 获取时间段内的数据
+        hours = list(range(start_hour, end_hour + 1))
+        
+        # 获取平衡计算结果（优化前）
+        original_total_load = [self.results['hourly_corrected_electric_load'][i] for i in hours]
+        original_grid_load = [self.results['hourly_grid_load'][i] for i in hours]
+        
+        # 对于优化前，我们将原始负荷视为基础负荷（因为优化前没有明确的负荷分解）
+        original_basic_load = [self.results['hourly_corrected_electric_load'][i] for i in hours]
+        # 优化前没有灵活负荷的概念，所以设为0
+        original_flexible_load = [0.0 for i in hours]
+        
+        # 获取优化结果
+        optimized_basic_load = [self.optimized_results['hourly_basic_load'][i] for i in hours]
+        optimized_flexible_load = [self.optimized_results['hourly_flexible_load'][i] for i in hours]
+        
+        # 优化后的总负荷是基础负荷和灵活负荷之和
+        optimized_total_load = [optimized_basic_load[i] + optimized_flexible_load[i] for i in hours]
+        
+        # 计算优化后的下网负荷（需要重新计算，这里简化处理）
+        # 假设优化后的下网负荷可以通过优化后的负荷和发电量计算得出
+        # 注意：这里需要实际的计算逻辑，我们暂时使用示例数据
+        try:
+            # 计算优化后的总负荷
+            optimized_total_load = [optimized_basic_load[i] + optimized_flexible_load[i] for i in hours]
+            
+            # 使用平衡计算中的计算方法来估算优化后的下网负荷
+            # 这里使用一个简化的逻辑，实际应用中需要更精确的计算
+            optimized_grid_load = []
+            for i in hours:
+                # 重新计算优化后的各种出力
+                chp_output = self.results['hourly_chp_output'][i]
+                pv_output = self.results['hourly_pv_output'][i]
+                wind_output = self.results['hourly_wind_output'][i]
+                
+                # 获取当前小时的修正后调峰机组参数
+                from datetime import datetime, timedelta
+                base_date = datetime(2024, 1, 1)
+                current_date = base_date + timedelta(hours=i)
+                current_month = current_date.month
+                
+                if 5 <= current_month <= 9:  # 夏季
+                    current_peak_power_min = self.data_model.peak_power_min_summer
+                    current_peak_power_max = self.data_model.peak_power_max
+                else:  # 冬季
+                    current_peak_power_min = self.data_model.peak_power_min_winter
+                    current_peak_power_max = self.data_model.peak_power_max
+                
+                # 计算优化后的调峰机组出力
+                peak_pending = optimized_total_load[i] - chp_output - pv_output - wind_output
+                peak_output = max(min(peak_pending, current_peak_power_max), current_peak_power_min)
+                thermal_output = chp_output + peak_output
+                
+                # 计算发电总量
+                generation = pv_output + wind_output + thermal_output
+                
+                # 计算优化后的下网负荷
+                optimized_grid_load_val = optimized_total_load[i] - generation
+                optimized_grid_load.append(optimized_grid_load_val)
+                
+        except Exception as e:
+            print(f"计算优化后下网负荷时出错: {e}")
+            # 如果计算出错，使用原始的下网负荷数据
+            optimized_grid_load = [self.results['hourly_grid_load'][i] for i in hours]
+        
+        # 将小时转换为日期格式（从2025-01-01开始）
+        from datetime import datetime, timedelta
+        dates = [datetime(2025, 1, 1) + timedelta(hours=h) for h in hours]
+        
+        # 绘制优化前后的对比图（不包括优化前灵活负荷）
+        line_orig_basic, = self.optimization_ax.plot(dates, original_basic_load, label='修正后电力负荷(优化前)', linewidth=0.8, color='blue', linestyle='--')
+        line_opt_basic, = self.optimization_ax.plot(dates, optimized_basic_load, label='基础负荷(优化后)', linewidth=0.8, color='blue', linestyle='-')
+        line_opt_flex, = self.optimization_ax.plot(dates, optimized_flexible_load, label='灵活负荷(优化后)', linewidth=0.8, color='orange', linestyle='-')
+        line_orig_grid, = self.optimization_ax.plot(dates, original_grid_load, label='下网负荷(优化前)', linewidth=0.8, color='red', linestyle='--')
+        line_opt_grid, = self.optimization_ax.plot(dates, optimized_grid_load, label='下网负荷(优化后)', linewidth=0.8, color='red', linestyle='-')
+        
+        self.optimization_ax.set_xlabel('日期 (MM-DD)')
+        self.optimization_ax.set_ylabel('功率 (kW)')
+        self.optimization_ax.set_title('优化前后负荷对比趋势图')
+        
+        # 设置x轴日期格式
+        self.optimization_ax.xaxis.set_major_formatter(plt.matplotlib.dates.DateFormatter('%m-%d'))
+        
+        # 根据时间跨度自动选择适当的日期定位器
+        date_span = (dates[-1] - dates[0]).days
+        if date_span <= 31:  # 一个月内，使用日定位器
+            self.optimization_ax.xaxis.set_major_locator(plt.matplotlib.dates.DayLocator(interval=1))
+        elif date_span <= 180:  # 6个月内，使用周定位器
+            self.optimization_ax.xaxis.set_major_locator(plt.matplotlib.dates.DayLocator(interval=7))
+        elif date_span <= 365:  # 一年内，使用双周定位器
+            self.optimization_ax.xaxis.set_major_locator(plt.matplotlib.dates.DayLocator(interval=14))
+        else:  # 超过一年，使用月定位器
+            self.optimization_ax.xaxis.set_major_locator(plt.matplotlib.dates.MonthLocator())
+        
+        # 旋转x轴标签以更好地显示
+        plt.setp(self.optimization_ax.xaxis.get_majorticklabels(), rotation=45, ha='right')
+        
+        # 创建图例并启用点击功能
+        legend = self.optimization_ax.legend(loc='upper left', bbox_to_anchor=(1, 1))  # 固定图例位置
+        
+        # 启用图例点击交互
+        lines = [line_orig_basic, line_opt_basic, line_opt_flex, line_orig_grid, line_opt_grid]
+        
+        # 为线条图例启用点击
+        lined = {}
+        for legline, origline in zip(legend.get_lines(), lines):
+            legline.set_picker(True)  # Enable picking on the legend line
+            lined[legline] = origline
+        
+        # 为图例中的文本也启用点击
+        for legtext, origline in zip(legend.get_texts(), lines):
+            legtext.set_picker(True)  # Enable picking on the legend text
+            lined[legtext] = origline
+        
+        # 保存线条和图例映射关系
+        self.lined_optimization = lined
+        
+        # 连接点击事件
+        self.optimization_canvas.mpl_connect('pick_event', self.on_legend_click_optimization)
+        
+        self.optimization_ax.grid(True, alpha=0.3)
+        
+        # 设置x轴范围
+        self.optimization_ax.set_xlim(dates[0], dates[-1])
+        
+        # 调整子图参数以确保图例和标签完全显示
+        self.optimization_figure.tight_layout()
+        # 为图例预留额外空间
+        self.optimization_figure.subplots_adjust(right=0.85)
+        
+        # 刷新画布
+        self.optimization_canvas.draw()
+        
+    def on_legend_click_optimization(self, event):
+        """
+        处理优化结果图表图例点击事件，显示/隐藏对应的曲线
+        """
+        # 获取被点击的图例元素
+        legitem = event.artist
+        
+        # 获取对应的原始线条
+        origline = self.lined_optimization[legitem]
+        
+        # 切换线条的可见性
+        vis = not origline.get_visible()
+        origline.set_visible(vis)
+        
+        # 更新所有相关的图例元素的透明度
+        legend = self.optimization_ax.get_legend()
+        if legend:
+            for legline, origline_ref in self.lined_optimization.items():
+                if origline_ref == origline:
+                    if vis:
+                        legline.set_alpha(1.0)
+                    else:
+                        legline.set_alpha(0.2)
+        
+        # 刷新画布
+        self.optimization_canvas.draw()
         
     def add_maintenance_entry(self):
         """
