@@ -207,6 +207,15 @@ class EnergyDataModel:
         # 出力限制计划数据
         self.output_limit_schedules = []  # 出力限制计划列表
         
+        # 优化参数
+        self.optimization_params = {
+            'basic_load_revenue': 1.0,      # 基础负荷单位收益 (元/kWh)
+            'flexible_load_revenue': 0.8,   # 灵活负荷单位收益 (元/kWh)
+            'thermal_cost': 0.2,            # 火电发电单位成本 (元/kWh)
+            'pv_cost': 0.05,               # 光伏发电单位成本 (元/kWh)
+            'wind_cost': 0.05              # 风机发电单位成本 (元/kWh)
+        }
+        
     def calculate_wind_total_capacity(self):
         """
         计算风机总装机容量
@@ -272,7 +281,8 @@ class EnergyDataModel:
             'flexible_load_min': self.flexible_load_min,
             'maintenance_schedules': self.maintenance_schedules,
             'commissioning_schedules': self.commissioning_schedules,
-            'output_limit_schedules': self.output_limit_schedules
+            'output_limit_schedules': self.output_limit_schedules,
+            'optimization_params': self.optimization_params
         }
         return data
         
@@ -334,6 +344,15 @@ class EnergyDataModel:
         
         # 加载出力限制计划数据
         self.output_limit_schedules = data.get('output_limit_schedules', [])
+        
+        # 加载优化参数
+        self.optimization_params = data.get('optimization_params', {
+            'basic_load_revenue': 1.0,
+            'flexible_load_revenue': 0.8,
+            'thermal_cost': 0.2,
+            'pv_cost': 0.05,
+            'wind_cost': 0.05
+        })
         
         # 加载计算结果（如果有）
         calculation_results = data.get('calculation_results')
@@ -1682,26 +1701,27 @@ class EnergyBalanceApp:
         self.total_cost_var = tk.StringVar(value="0.0")
         ttk.Entry(stats_frame, textvariable=self.total_cost_var, width=20).grid(row=6, column=1, pady=2)
         
-        ttk.Label(stats_frame, text="平均成本 (元/kWh):").grid(row=7, column=0, sticky=tk.W, pady=2)
-        self.avg_cost_var = tk.StringVar(value="0.0")
-        ttk.Entry(stats_frame, textvariable=self.avg_cost_var, width=20).grid(row=7, column=1, pady=2)
-        
-        # 时间范围选择区域
-        time_range_frame = ttk.LabelFrame(tab, text="时间范围", padding="10")
+        # 添加时间段选择区域（与数据导入tab保持一致）
+        time_range_frame = ttk.LabelFrame(tab, text="时间段选择", padding="10")
         time_range_frame.grid(row=1, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
         
-        ttk.Label(time_range_frame, text="开始时间:").grid(row=0, column=0, sticky=tk.W, pady=2)
-        self.start_time_var = tk.StringVar(value="2023-01-01 00:00:00")
-        ttk.Entry(time_range_frame, textvariable=self.start_time_var, width=20).grid(row=0, column=1, pady=2)
+        ttk.Label(time_range_frame, text="开始日期:").grid(row=0, column=0, sticky=tk.W, padx=(0, 5))
+        self.start_date_var = tk.StringVar(value="2025-01-01")
+        self.start_date_entry = ttk.Entry(time_range_frame, textvariable=self.start_date_var, width=12)
+        self.start_date_entry.grid(row=0, column=1, padx=5)
         
-        ttk.Label(time_range_frame, text="结束时间:").grid(row=1, column=0, sticky=tk.W, pady=2)
-        self.end_time_var = tk.StringVar(value="2023-12-31 23:59:59")
-        ttk.Entry(time_range_frame, textvariable=self.end_time_var, width=20).grid(row=1, column=1, pady=2)
+        ttk.Label(time_range_frame, text="结束日期:").grid(row=0, column=2, sticky=tk.W, padx=(10, 5))
+        self.end_date_var = tk.StringVar(value="2025-12-31")
+        self.end_date_entry = ttk.Entry(time_range_frame, textvariable=self.end_date_var, width=12)
+        self.end_date_entry.grid(row=0, column=3, padx=5)
         
-        # 图表区域
-        plot_frame = ttk.Frame(tab)
-        plot_frame.grid(row=2, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
+        ttk.Button(time_range_frame, text="更新图表", command=self.update_imported_data_plot).grid(row=0, column=4, padx=(10, 0))
         
+        # 图表展示（用于显示导入数据的趋势）
+        plot_frame = ttk.LabelFrame(tab, text="已导入数据趋势图", padding="10")
+        plot_frame.grid(row=2, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=10)
+        
+        # 创建matplotlib图形
         self.data_figure = Figure(figsize=(10, 6), dpi=100)  # 增加高度
         self.data_ax = self.data_figure.add_subplot(111)
         self.data_canvas = FigureCanvasTkAgg(self.data_figure, plot_frame)
@@ -1709,13 +1729,13 @@ class EnergyBalanceApp:
         
         # 配置权重
         tab.columnconfigure(0, weight=1)
-        tab.rowconfigure(8, weight=1)  # 给图表区域分配更多空间
+        tab.rowconfigure(2, weight=1)  # 给图表区域分配更多空间
         stats_frame.columnconfigure(0, weight=1)
         stats_frame.rowconfigure(0, weight=1)
         time_range_frame.columnconfigure(5, weight=1)
         plot_frame.columnconfigure(0, weight=1)
         plot_frame.rowconfigure(0, weight=1)
-
+        
     def create_function_settings_tab(self, notebook):
         tab = ttk.Frame(notebook, padding="10")
         notebook.add(tab, text="⚙️ 机组设置")  # 修改标签名称为"设置"并添加齿轮图标
@@ -1961,9 +1981,6 @@ class EnergyBalanceApp:
         ttk.Entry(stats_frame, textvariable=self.total_cost_var, width=20).grid(row=6, column=1, pady=2)
         
         stats_frame.rowconfigure(0, weight=1)
-        time_range_frame.columnconfigure(5, weight=1)
-        plot_frame.columnconfigure(0, weight=1)
-        plot_frame.rowconfigure(0, weight=1)
         
     def create_function_settings_tab(self, notebook):
         tab = ttk.Frame(notebook, padding="10")
@@ -2677,6 +2694,23 @@ class EnergyBalanceApp:
             messagebox.showinfo("成功", "所有函数参数已保存！")
         except Exception as e:
             messagebox.showerror("错误", f"保存参数时发生错误：{str(e)}")
+            
+    def save_optimization_params(self):
+        """
+        保存优化参数设置
+        """
+        try:
+            # 保存优化参数
+            self.data_model.optimization_params['basic_load_revenue'] = self.basic_load_revenue.get()
+            self.data_model.optimization_params['flexible_load_revenue'] = self.flexible_load_revenue.get()
+            self.data_model.optimization_params['thermal_cost'] = self.thermal_cost.get()
+            self.data_model.optimization_params['pv_cost'] = self.pv_cost.get()
+            self.data_model.optimization_params['wind_cost'] = self.wind_cost.get()
+            
+            # 显示成功消息
+            messagebox.showinfo("成功", "优化参数已保存！")
+        except Exception as e:
+            messagebox.showerror("错误", f"保存优化参数时发生错误：{str(e)}")
             
     def save_and_return_to_project_list(self):
         """
@@ -4127,35 +4161,37 @@ class EnergyBalanceApp:
         
         # 基础负荷单位收益
         ttk.Label(params_frame, text="基础负荷单位收益 (元/kWh): ").grid(row=0, column=0, sticky=tk.W, pady=5)
-        self.basic_load_revenue = tk.DoubleVar(value=1.0)  # 默认值：1
+        self.basic_load_revenue = tk.DoubleVar(value=self.data_model.optimization_params['basic_load_revenue'])  # 使用数据模型中的值
         ttk.Entry(params_frame, textvariable=self.basic_load_revenue, width=20).grid(row=0, column=1, sticky=tk.W, padx=5)
         
         # 灵活负荷单位收益
         ttk.Label(params_frame, text="灵活负荷单位收益 (元/kWh): ").grid(row=1, column=0, sticky=tk.W, pady=5)
-        self.flexible_load_revenue = tk.DoubleVar(value=0.8)  # 默认值：0.8
+        self.flexible_load_revenue = tk.DoubleVar(value=self.data_model.optimization_params['flexible_load_revenue'])  # 使用数据模型中的值
         ttk.Entry(params_frame, textvariable=self.flexible_load_revenue, width=20).grid(row=1, column=1, sticky=tk.W, padx=5)
         
         # 火电发电单位成本
         ttk.Label(params_frame, text="火电发电单位成本 (元/kWh): ").grid(row=2, column=0, sticky=tk.W, pady=5)
-        self.thermal_cost = tk.DoubleVar(value=0.2)  # 默认值：0.2
+        self.thermal_cost = tk.DoubleVar(value=self.data_model.optimization_params['thermal_cost'])  # 使用数据模型中的值
         ttk.Entry(params_frame, textvariable=self.thermal_cost, width=20).grid(row=2, column=1, sticky=tk.W, padx=5)
         
         # 光伏发电单位成本
         ttk.Label(params_frame, text="光伏发电单位成本 (元/kWh): ").grid(row=3, column=0, sticky=tk.W, pady=5)
-        self.pv_cost = tk.DoubleVar(value=0.05)  # 默认值：0.05
+        self.pv_cost = tk.DoubleVar(value=self.data_model.optimization_params['pv_cost'])  # 使用数据模型中的值
         ttk.Entry(params_frame, textvariable=self.pv_cost, width=20).grid(row=3, column=1, sticky=tk.W, padx=5)
         
         # 风机发电单位成本
         ttk.Label(params_frame, text="风机发电单位成本 (元/kWh): ").grid(row=4, column=0, sticky=tk.W, pady=5)
-        self.wind_cost = tk.DoubleVar(value=0.05)  # 默认值：0.05
+        self.wind_cost = tk.DoubleVar(value=self.data_model.optimization_params['wind_cost'])  # 使用数据模型中的值
         ttk.Entry(params_frame, textvariable=self.wind_cost, width=20).grid(row=4, column=1, sticky=tk.W, padx=5)
         
         # 优化控制按钮
         control_frame = ttk.Frame(tab)
         control_frame.grid(row=2, column=0, sticky=(tk.W, tk.E), pady=5)
         
-        ttk.Button(control_frame, text="开始优化计算", command=self.start_optimization).grid(row=0, column=0, padx=5, pady=10)
-        ttk.Button(control_frame, text="导出优化结果", command=self.export_optimization_results).grid(row=0, column=1, padx=5, pady=10)
+        # 保存优化参数按钮
+        ttk.Button(control_frame, text="保存优化参数", command=self.save_optimization_params).grid(row=0, column=0, padx=5, pady=10)
+        ttk.Button(control_frame, text="开始优化计算", command=self.start_optimization).grid(row=0, column=1, padx=5, pady=10)
+        ttk.Button(control_frame, text="导出优化结果", command=self.export_optimization_results).grid(row=0, column=2, padx=5, pady=10)
         
         # 优化结果显示
         result_frame = ttk.LabelFrame(tab, text="优化结果", padding="10")

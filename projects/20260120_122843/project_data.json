@@ -43838,7 +43838,7 @@
       "count": 1,
       "output_correction_factor": 1.0,
       "params": {
-        "installed_capacity": 326000.0,
+        "installed_capacity": 320000.0,
         "system_efficiency": 0.81
       }
     }
@@ -43847,9 +43847,9 @@
     "electric_heat_ratio": 0.5,
     "base_electric": 100.0
   },
-  "peak_power_min_summer": 90000.0,
+  "peak_power_min_summer": 100000.0,
   "peak_power_min_winter": 160000.0,
-  "peak_power_max": 240000.0,
+  "peak_power_max": 230000.0,
   "max_electric_load": 600000.0,
   "flexible_load_max": 80000.0,
   "flexible_load_min": 40000.0,
@@ -43884,5 +43884,12 @@
     }
   ],
   "commissioning_schedules": [],
-  "output_limit_schedules": []
+  "output_limit_schedules": [],
+  "optimization_params": {
+    "basic_load_revenue": 1.2,
+    "flexible_load_revenue": 0.8,
+    "thermal_cost": 0.2,
+    "pv_cost": 0.1,
+    "wind_cost": 0.1
+  }
 }
