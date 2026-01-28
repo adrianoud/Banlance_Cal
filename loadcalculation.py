@@ -1565,6 +1565,9 @@ class EnergyBalanceApp:
         # 连接点击事件
         self.data_canvas.mpl_connect('pick_event', self.on_legend_click_data)
         
+        # 连接鼠标移动事件以实现悬浮功能
+        self.data_canvas.mpl_connect('motion_notify_event', self.on_data_hover)
+        
         self.data_ax.grid(True, alpha=0.3)
         
         # 设置x轴范围
@@ -3666,6 +3669,9 @@ class EnergyBalanceApp:
         # 连接点击事件
         self.canvas.mpl_connect('pick_event', self.on_legend_click_result)
         
+        # 连接鼠标移动事件以实现悬浮功能
+        self.canvas.mpl_connect('motion_notify_event', self.on_result_hover)
+        
         self.ax.grid(True, alpha=0.3)
         
         # 设置x轴范围
@@ -4715,6 +4721,9 @@ class EnergyBalanceApp:
         # 连接点击事件
         self.optimization_canvas.mpl_connect('pick_event', self.on_legend_click_optimization)
         
+        # 连接鼠标移动事件以实现悬浮功能
+        self.optimization_canvas.mpl_connect('motion_notify_event', self.on_optimization_hover)
+        
         self.optimization_ax.grid(True, alpha=0.3)
         
         # 设置x轴范围
@@ -5392,6 +5401,304 @@ class EnergyBalanceApp:
         
         # 刷新画布
         self.canvas.draw()
+
+    def on_data_hover(self, event):
+        """
+        处理数据图表上的鼠标悬浮事件，显示当前悬浮位置的时间和所有曲线的实际数据值
+        """
+        # 检查事件是否在图表区域内
+        if event.inaxes != self.data_ax:
+            # 如果鼠标不在图表区域内，移除注释
+            if hasattr(self, 'data_annotation') and self.data_annotation:
+                try:
+                    self.data_annotation.remove()
+                    self.data_annotation = None
+                    self.data_canvas.draw_idle()
+                except:
+                    pass
+            return
+            
+        # 获取当前坐标
+        x, y = event.xdata, event.ydata
+        
+        # 将x坐标转换为日期 - 使用matplotlib的日期转换机制
+        try:
+            import matplotlib.dates as mdates
+            from datetime import datetime, timedelta
+            
+            # 将matplotlib日期转换为datetime对象
+            hover_datetime = mdates.num2date(x)
+            # 只显示到整小时
+            date_str = hover_datetime.strftime('%m-%d %H:00')  # 只显示月-日 小时:00，不显示分钟
+            
+            # 计算最接近的小时索引，基于相对于年初的小时数
+            # 假设数据从1月1日开始，计算相对于年初的小时数
+            # 获取hover_datetime是一年中的第几天和小时
+            day_of_year = hover_datetime.timetuple().tm_yday  # 一年中的第几天 (1-366)
+            hour_of_day = hover_datetime.hour  # 小时 (0-23)
+            
+            # 计算总小时数 (0-8759)
+            hour_idx = (day_of_year - 1) * 24 + hour_of_day
+            
+            # 确保小时索引在有效范围内
+            if 0 <= hour_idx < 8760:
+                # 获取所有曲线在当前小时的数据（使用实际数据值，而非鼠标位置的y值）
+                values_info = []
+                
+                # 检查是否有对应的数据
+                if self.data_model.data_imported['electric'] and hour_idx < len(self.data_model.electric_load_hourly):
+                    values_info.append(f"电力负荷: {self.data_model.electric_load_hourly[hour_idx]:.2f} kW")
+                
+                if self.data_model.data_imported['heat'] and hour_idx < len(self.data_model.heat_load_hourly):
+                    values_info.append(f"热力负荷: {self.data_model.heat_load_hourly[hour_idx]:.2f} kW")
+                
+                if self.data_model.data_imported['solar'] and hour_idx < len(self.data_model.solar_irradiance_hourly):
+                    values_info.append(f"光照强度: {self.data_model.solar_irradiance_hourly[hour_idx]:.2f} W/m²")
+                
+                if self.data_model.data_imported['wind'] and hour_idx < len(self.data_model.wind_speed_hourly):
+                    values_info.append(f"风速: {self.data_model.wind_speed_hourly[hour_idx]:.2f} m/s")
+                
+                if self.data_model.data_imported['grid_price'] and hour_idx < len(self.data_model.grid_purchase_price_hourly):
+                    values_info.append(f"下网电价: {self.data_model.grid_purchase_price_hourly[hour_idx]:.2f} 元/kWh")
+                
+                if values_info:
+                    # 组合信息，只使用实际数据值，不使用鼠标位置的y值
+                    tooltip_text = f"日期: {date_str}\n" + "\n".join(values_info)
+                else:
+                    # 如果没有可用数据，显示日期和坐标值
+                    tooltip_text = f"日期: {date_str}\n数值: {y:.2f}"
+            else:
+                # 如果超出范围，只显示日期
+                tooltip_text = f"日期: {date_str}\n超出数据范围(索引: {hour_idx})"
+            
+            # 清除之前的注释
+            if hasattr(self, 'data_annotation') and self.data_annotation:
+                try:
+                    self.data_annotation.remove()
+                except:
+                    pass
+            
+            # 创建新的注释，使用x坐标位置但不依赖y坐标值
+            self.data_annotation = self.data_ax.annotate(
+                tooltip_text,
+                xy=(x, 0),  # 只使用x坐标来定位垂直位置，y值用0作为参考
+                xytext=(10, 10),
+                textcoords='offset points',
+                bbox=dict(boxstyle='round,pad=0.3', fc='yellow', alpha=0.7),
+                fontsize=9
+            )
+            
+            # 刷新画布
+            self.data_canvas.draw_idle()
+            
+        except Exception as e:
+            # 如果转换出错，移除可能存在的注释
+            if hasattr(self, 'data_annotation') and self.data_annotation:
+                try:
+                    self.data_annotation.remove()
+                    self.data_annotation = None
+                except:
+                    pass
+
+    def on_result_hover(self, event):
+        """
+        处理结果图表上的鼠标悬浮事件，显示当前悬浮位置的时间和所有曲线的实际数据值
+        """
+        # 检查事件是否在图表区域内
+        if event.inaxes != self.ax:
+            # 如果鼠标不在图表区域内，移除注释
+            if hasattr(self, 'result_annotation') and self.result_annotation:
+                try:
+                    self.result_annotation.remove()
+                    self.result_annotation = None
+                    self.canvas.draw_idle()
+                except:
+                    pass
+            return
+            
+        # 获取当前坐标
+        x, y = event.xdata, event.ydata
+        
+        # 将x坐标转换为日期 - 使用matplotlib的日期转换机制
+        try:
+            import matplotlib.dates as mdates
+            from datetime import datetime, timedelta
+            
+            # 将matplotlib日期转换为datetime对象
+            hover_datetime = mdates.num2date(x)
+            # 只显示到整小时
+            date_str = hover_datetime.strftime('%m-%d %H:00')  # 只显示月-日 小时:00，不显示分钟
+            
+            # 计算最接近的小时索引，基于相对于年初的小时数
+            # 获取hover_datetime是一年中的第几天和小时
+            day_of_year = hover_datetime.timetuple().tm_yday  # 一年中的第几天 (1-366)
+            hour_of_day = hover_datetime.hour  # 小时 (0-23)
+            
+            # 计算总小时数 (0-8759)
+            hour_idx = (day_of_year - 1) * 24 + hour_of_day
+            
+            # 确保小时索引在有效范围内
+            if 0 <= hour_idx < 8760 and self.results:
+                # 获取所有曲线在当前小时的数据（使用实际数据值，而非鼠标位置的y值）
+                values_info = []
+                
+                # 检查结果数据是否可用
+                if hour_idx < len(self.results.get('hourly_total_load', [])):
+                    values_info.append(f"总负荷: {self.results['hourly_total_load'][hour_idx]:.2f} kW")
+                
+                if hour_idx < len(self.results.get('hourly_generation', [])):
+                    values_info.append(f"总出力: {self.results['hourly_generation'][hour_idx]:.2f} kW")
+                
+                if hour_idx < len(self.results.get('hourly_grid_load', [])):
+                    values_info.append(f"下网负荷: {self.results['hourly_grid_load'][hour_idx]:.2f} kW")
+                
+                if hour_idx < len(self.results.get('hourly_pv_output', [])):
+                    values_info.append(f"光伏出力: {self.results['hourly_pv_output'][hour_idx]:.2f} kW")
+                
+                if hour_idx < len(self.results.get('hourly_wind_output', [])):
+                    values_info.append(f"风机出力: {self.results['hourly_wind_output'][hour_idx]:.2f} kW")
+                
+                if hour_idx < len(self.results.get('hourly_chp_output', [])):
+                    values_info.append(f"热电出力: {self.results['hourly_chp_output'][hour_idx]:.2f} kW")
+                
+                if values_info:
+                    # 组合信息，只使用实际数据值，不使用鼠标位置的y值
+                    tooltip_text = f"日期: {date_str}\n" + "\n".join(values_info)
+                else:
+                    # 如果没有可用数据，显示日期和坐标值
+                    tooltip_text = f"日期: {date_str}\n数值: {y:.2f}"
+            else:
+                # 如果超出范围，只显示日期
+                tooltip_text = f"日期: {date_str}\n超出数据范围(索引: {hour_idx})"
+            
+            # 清除之前的注释
+            if hasattr(self, 'result_annotation') and self.result_annotation:
+                try:
+                    self.result_annotation.remove()
+                except:
+                    pass
+            
+            # 创建新的注释，使用x坐标位置但不依赖y坐标值
+            self.result_annotation = self.ax.annotate(
+                tooltip_text,
+                xy=(x, 0),  # 只使用x坐标来定位垂直位置，y值用0作为参考
+                xytext=(10, 10),
+                textcoords='offset points',
+                bbox=dict(boxstyle='round,pad=0.3', fc='yellow', alpha=0.7),
+                fontsize=9
+            )
+            
+            # 刷新画布
+            self.canvas.draw_idle()
+            
+        except Exception as e:
+            # 如果转换出错，移除可能存在的注释
+            if hasattr(self, 'result_annotation') and self.result_annotation:
+                try:
+                    self.result_annotation.remove()
+                    self.result_annotation = None
+                except:
+                    pass
+
+    def on_optimization_hover(self, event):
+        """
+        处理优化结果图表上的鼠标悬浮事件，显示当前悬浮位置的时间和所有曲线的实际数据值
+        """
+        # 检查事件是否在图表区域内
+        if event.inaxes != self.optimization_ax:
+            # 如果鼠标不在图表区域内，移除注释
+            if hasattr(self, 'optimization_annotation') and self.optimization_annotation:
+                try:
+                    self.optimization_annotation.remove()
+                    self.optimization_annotation = None
+                    self.optimization_canvas.draw_idle()
+                except:
+                    pass
+            return
+            
+        # 获取当前坐标
+        x, y = event.xdata, event.ydata
+        
+        # 将x坐标转换为日期 - 使用matplotlib的日期转换机制
+        try:
+            import matplotlib.dates as mdates
+            from datetime import datetime, timedelta
+            
+            # 将matplotlib日期转换为datetime对象
+            hover_datetime = mdates.num2date(x)
+            # 只显示到整小时
+            date_str = hover_datetime.strftime('%m-%d %H:00')  # 只显示月-日 小时:00，不显示分钟
+            
+            # 计算最接近的小时索引，基于相对于年初的小时数
+            # 获取hover_datetime是一年中的第几天和小时
+            day_of_year = hover_datetime.timetuple().tm_yday  # 一年中的第几天 (1-366)
+            hour_of_day = hover_datetime.hour  # 小时 (0-23)
+            
+            # 计算总小时数 (0-8759)
+            hour_idx = (day_of_year - 1) * 24 + hour_of_day
+            
+            # 确保小时索引在有效范围内
+            if 0 <= hour_idx < 8760:
+                # 获取所有曲线在当前小时的数据（使用实际数据值，而非鼠标位置的y值）
+                values_info = []
+                
+                # 检查优化结果数据是否可用
+                if hasattr(self, 'optimized_results') and self.optimized_results:
+                    if hour_idx < len(self.optimized_results.get('hourly_basic_load', [])):
+                        values_info.append(f"基础负荷(优化后): {self.optimized_results['hourly_basic_load'][hour_idx]:.2f} kW")
+                    
+                    if hour_idx < len(self.optimized_results.get('hourly_flexible_load', [])):
+                        values_info.append(f"灵活负荷(优化后): {self.optimized_results['hourly_flexible_load'][hour_idx]:.2f} kW")
+                    
+                    if hour_idx < len(self.optimized_results.get('hourly_revenue', [])):
+                        values_info.append(f"每小时收益: {self.optimized_results['hourly_revenue'][hour_idx]:.2f} 元")
+                
+                # 如果有平衡计算结果，也显示优化前的数据
+                if self.results:
+                    if hour_idx < len(self.results.get('hourly_corrected_electric_load', [])):
+                        values_info.append(f"修正后电力负荷(优化前): {self.results['hourly_corrected_electric_load'][hour_idx]:.2f} kW")
+                    
+                    if hour_idx < len(self.results.get('hourly_grid_load', [])):
+                        values_info.append(f"下网负荷: {self.results['hourly_grid_load'][hour_idx]:.2f} kW")
+                
+                if values_info:
+                    # 组合信息，只使用实际数据值，不使用鼠标位置的y值
+                    tooltip_text = f"日期: {date_str}\n" + "\n".join(values_info)
+                else:
+                    # 如果没有可用数据，显示日期和坐标值
+                    tooltip_text = f"日期: {date_str}\n数值: {y:.2f}"
+            else:
+                # 如果超出范围，只显示日期
+                tooltip_text = f"日期: {date_str}\n超出数据范围(索引: {hour_idx})"
+            
+            # 清除之前的注释
+            if hasattr(self, 'optimization_annotation') and self.optimization_annotation:
+                try:
+                    self.optimization_annotation.remove()
+                except:
+                    pass
+            
+            # 创建新的注释，使用x坐标位置但不依赖y坐标值
+            self.optimization_annotation = self.optimization_ax.annotate(
+                tooltip_text,
+                xy=(x, 0),  # 只使用x坐标来定位垂直位置，y值用0作为参考
+                xytext=(10, 10),
+                textcoords='offset points',
+                bbox=dict(boxstyle='round,pad=0.3', fc='yellow', alpha=0.7),
+                fontsize=9
+            )
+            
+            # 刷新画布
+            self.optimization_canvas.draw_idle()
+            
+        except Exception as e:
+            # 如果转换出错，移除可能存在的注释
+            if hasattr(self, 'optimization_annotation') and self.optimization_annotation:
+                try:
+                    self.optimization_annotation.remove()
+                    self.optimization_annotation = None
+                except:
+                    pass
 
     def auto_adjust_y_axis_data(self):
         """
