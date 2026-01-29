@@ -213,7 +213,9 @@ class EnergyDataModel:
             'flexible_load_revenue': 0.8,   # 灵活负荷单位收益 (元/kWh)
             'thermal_cost': 0.2,            # 火电发电单位成本 (元/kWh)
             'pv_cost': 0.05,               # 光伏发电单位成本 (元/kWh)
-            'wind_cost': 0.05              # 风机发电单位成本 (元/kWh)
+            'wind_cost': 0.05,              # 风机发电单位成本 (元/kWh)
+            'load_change_rate_limit': 100000.0,  # 负荷最大变动率 (kW/Hr)
+            'min_grid_load': 0.0            # 最小下网负荷 (kW)
         }
         
     def calculate_wind_total_capacity(self):
@@ -352,7 +354,9 @@ class EnergyDataModel:
             'flexible_load_revenue': 0.8,
             'thermal_cost': 0.2,
             'pv_cost': 0.05,
-            'wind_cost': 0.05
+            'wind_cost': 0.05,
+            'load_change_rate_limit': 100000.0,
+            'min_grid_load': 0.0
         })
         
         # 加载优化结果（如果有）
@@ -2714,6 +2718,8 @@ class EnergyBalanceApp:
             self.data_model.optimization_params['thermal_cost'] = self.thermal_cost.get()
             self.data_model.optimization_params['pv_cost'] = self.pv_cost.get()
             self.data_model.optimization_params['wind_cost'] = self.wind_cost.get()
+            self.data_model.optimization_params['load_change_rate_limit'] = self.load_change_rate_limit.get()
+            self.data_model.optimization_params['min_grid_load'] = self.min_grid_load.get()
             
             # 显示成功消息
             messagebox.showinfo("成功", "优化参数已保存！")
@@ -4202,9 +4208,23 @@ class EnergyBalanceApp:
         self.wind_cost = tk.DoubleVar(value=self.data_model.optimization_params['wind_cost'])  # 使用数据模型中的值
         ttk.Entry(params_frame, textvariable=self.wind_cost, width=20).grid(row=4, column=1, sticky=tk.W, padx=5)
         
+        # 约束设置区域
+        constraint_frame = ttk.LabelFrame(tab, text="约束设置", padding="10")
+        constraint_frame.grid(row=2, column=0, sticky=(tk.W, tk.E), pady=(0, 20))
+        
+        # 负荷最大变动率
+        ttk.Label(constraint_frame, text="负荷最大变动率 (kW/Hr): ").grid(row=0, column=0, sticky=tk.W, pady=5)
+        self.load_change_rate_limit = tk.DoubleVar(value=self.data_model.optimization_params.get('load_change_rate_limit', 100000.0))  # 使用数据模型中的值
+        ttk.Entry(constraint_frame, textvariable=self.load_change_rate_limit, width=20).grid(row=0, column=1, sticky=tk.W, padx=5)
+        
+        # 最小下网负荷
+        ttk.Label(constraint_frame, text="最小下网负荷 (kW): ").grid(row=1, column=0, sticky=tk.W, pady=5)
+        self.min_grid_load = tk.DoubleVar(value=self.data_model.optimization_params.get('min_grid_load', 0.0))  # 使用数据模型中的值
+        ttk.Entry(constraint_frame, textvariable=self.min_grid_load, width=20).grid(row=1, column=1, sticky=tk.W, padx=5)
+        
         # 优化控制按钮
         control_frame = ttk.Frame(tab)
-        control_frame.grid(row=2, column=0, sticky=(tk.W, tk.E), pady=5)
+        control_frame.grid(row=3, column=0, sticky=(tk.W, tk.E), pady=5)
         
         # 保存优化参数按钮
         ttk.Button(control_frame, text="保存优化参数", command=self.save_optimization_params).grid(row=0, column=0, padx=5, pady=10)
@@ -4214,7 +4234,7 @@ class EnergyBalanceApp:
         
         # 优化结果显示
         result_frame = ttk.LabelFrame(tab, text="优化结果", padding="10")
-        result_frame.grid(row=3, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=5)
+        result_frame.grid(row=4, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=5)
         
         self.optimization_result_text = tk.Text(result_frame, height=15, width=80)
         scrollbar = ttk.Scrollbar(result_frame, orient=tk.VERTICAL, command=self.optimization_result_text.yview)
@@ -4225,14 +4245,15 @@ class EnergyBalanceApp:
         
         # 配置权重
         tab.columnconfigure(0, weight=1)
-        tab.rowconfigure(3, weight=1)
+        tab.rowconfigure(4, weight=1)
         params_frame.columnconfigure(1, weight=1)
+        constraint_frame.columnconfigure(1, weight=1)
         result_frame.columnconfigure(0, weight=1)
         result_frame.rowconfigure(0, weight=1)
         
         # 优化结果趋势图区域
         plot_optimization_frame = ttk.LabelFrame(tab, text="优化结果趋势图", padding="10")
-        plot_optimization_frame.grid(row=4, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=5)
+        plot_optimization_frame.grid(row=5, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=5)
         
         # 时间段选择区域
         time_range_frame_opt = ttk.LabelFrame(plot_optimization_frame, text="时间段选择", padding="10")
@@ -4257,7 +4278,7 @@ class EnergyBalanceApp:
         self.optimization_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True, pady=5)
         
         # 配置权重
-        tab.rowconfigure(4, weight=1)
+        tab.rowconfigure(5, weight=1)
 
     def start_optimization(self):
         """
