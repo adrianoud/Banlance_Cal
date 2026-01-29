@@ -4179,9 +4179,13 @@ class EnergyBalanceApp:
         back_btn = ttk.Button(tab, text="保存并返回项目列表", command=self.save_and_return_to_project_list)
         back_btn.grid(row=0, column=0, sticky=tk.E, padx=5, pady=5)
         
+        # 创建主容器框架，用于放置参数设置和约束设置
+        main_control_frame = ttk.Frame(tab)
+        main_control_frame.grid(row=1, column=0, sticky=(tk.W, tk.E), pady=(0, 10))
+        
         # 优化参数设置区域
-        params_frame = ttk.LabelFrame(tab, text="优化参数设置", padding="10")
-        params_frame.grid(row=1, column=0, sticky=(tk.W, tk.E), pady=(0, 20))
+        params_frame = ttk.LabelFrame(main_control_frame, text="优化参数设置", padding="10")
+        params_frame.grid(row=0, column=0, sticky=(tk.W, tk.E), padx=(0, 5))
         
         # 基础负荷单位收益
         ttk.Label(params_frame, text="基础负荷单位收益 (元/kWh): ").grid(row=0, column=0, sticky=tk.W, pady=5)
@@ -4209,8 +4213,8 @@ class EnergyBalanceApp:
         ttk.Entry(params_frame, textvariable=self.wind_cost, width=20).grid(row=4, column=1, sticky=tk.W, padx=5)
         
         # 约束设置区域
-        constraint_frame = ttk.LabelFrame(tab, text="约束设置", padding="10")
-        constraint_frame.grid(row=2, column=0, sticky=(tk.W, tk.E), pady=(0, 20))
+        constraint_frame = ttk.LabelFrame(main_control_frame, text="约束设置", padding="10")
+        constraint_frame.grid(row=0, column=1, sticky=(tk.W, tk.E), padx=(5, 0))
         
         # 负荷最大变动率
         ttk.Label(constraint_frame, text="负荷最大变动率 (kW/Hr): ").grid(row=0, column=0, sticky=tk.W, pady=5)
@@ -4222,9 +4226,13 @@ class EnergyBalanceApp:
         self.min_grid_load = tk.DoubleVar(value=self.data_model.optimization_params.get('min_grid_load', 0.0))  # 使用数据模型中的值
         ttk.Entry(constraint_frame, textvariable=self.min_grid_load, width=20).grid(row=1, column=1, sticky=tk.W, padx=5)
         
+        # 配置权重以让两个框架平分空间
+        main_control_frame.columnconfigure(0, weight=1)
+        main_control_frame.columnconfigure(1, weight=1)
+        
         # 优化控制按钮
         control_frame = ttk.Frame(tab)
-        control_frame.grid(row=3, column=0, sticky=(tk.W, tk.E), pady=5)
+        control_frame.grid(row=2, column=0, sticky=(tk.W, tk.E), pady=5)
         
         # 保存优化参数按钮
         ttk.Button(control_frame, text="保存优化参数", command=self.save_optimization_params).grid(row=0, column=0, padx=5, pady=10)
@@ -4232,11 +4240,18 @@ class EnergyBalanceApp:
         ttk.Button(control_frame, text="导出优化结果", command=self.export_optimization_results).grid(row=0, column=2, padx=5, pady=10)
         ttk.Button(control_frame, text="更新趋势图", command=self.update_optimization_plot).grid(row=0, column=3, padx=5, pady=10)
         
+        # 进度条
+        self.optimization_progress = ttk.Progressbar(control_frame, mode='determinate', length=200)
+        self.optimization_progress.grid(row=0, column=4, padx=10, pady=10)
+        
+        self.optimization_progress_label = ttk.Label(control_frame, text="")
+        self.optimization_progress_label.grid(row=0, column=5, padx=5, pady=10)
+        
         # 优化结果显示
         result_frame = ttk.LabelFrame(tab, text="优化结果", padding="10")
-        result_frame.grid(row=4, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=5)
+        result_frame.grid(row=3, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=5)
         
-        self.optimization_result_text = tk.Text(result_frame, height=15, width=80)
+        self.optimization_result_text = tk.Text(result_frame, height=20, width=80)
         scrollbar = ttk.Scrollbar(result_frame, orient=tk.VERTICAL, command=self.optimization_result_text.yview)
         self.optimization_result_text.configure(yscrollcommand=scrollbar.set)
         
@@ -4245,7 +4260,7 @@ class EnergyBalanceApp:
         
         # 配置权重
         tab.columnconfigure(0, weight=1)
-        tab.rowconfigure(4, weight=1)
+        tab.rowconfigure(3, weight=1)
         params_frame.columnconfigure(1, weight=1)
         constraint_frame.columnconfigure(1, weight=1)
         result_frame.columnconfigure(0, weight=1)
@@ -4253,7 +4268,7 @@ class EnergyBalanceApp:
         
         # 优化结果趋势图区域
         plot_optimization_frame = ttk.LabelFrame(tab, text="优化结果趋势图", padding="10")
-        plot_optimization_frame.grid(row=5, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=5)
+        plot_optimization_frame.grid(row=4, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=5)
         
         # 时间段选择区域
         time_range_frame_opt = ttk.LabelFrame(plot_optimization_frame, text="时间段选择", padding="10")
@@ -4278,7 +4293,7 @@ class EnergyBalanceApp:
         self.optimization_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True, pady=5)
         
         # 配置权重
-        tab.rowconfigure(5, weight=1)
+        tab.rowconfigure(4, weight=1)
 
     def start_optimization(self):
         """
@@ -4317,10 +4332,13 @@ class EnergyBalanceApp:
         from datetime import datetime, timedelta
         base_date = datetime(2024, 1, 1)
         
+        # 获取约束参数
+        load_change_rate_limit = self.load_change_rate_limit.get()
+        min_grid_load = self.min_grid_load.get()
+        
+        # 预先计算所有小时的基本参数，以供约束使用
+        all_hour_params = []
         for hour in range(8760):
-            # 获取平衡计算得到的电力负荷（考虑检修和投运计划修正后）作为基础负荷的最大值
-            max_basic_load = self.results['hourly_corrected_electric_load'][hour]
-            
             # 获取当前小时的其他参数（来自平衡计算结果）
             chp_output = self.results['hourly_chp_output'][hour]
             pv_output = self.results['hourly_pv_output'][hour]
@@ -4395,6 +4413,32 @@ class EnergyBalanceApp:
                     else:  # 冬季
                         current_peak_power_min = self.data_model.peak_power_min_winter - adjusted_power_size
             
+            all_hour_params.append({
+                'hour': hour,
+                'chp_output': chp_output,
+                'pv_output': pv_output,
+                'wind_output': wind_output,
+                'max_flexible_load': max_flexible_load,
+                'min_flexible_load': min_flexible_load,
+                'current_peak_power_max': current_peak_power_max,
+                'current_peak_power_min': current_peak_power_min,
+                'max_basic_load': self.results['hourly_corrected_electric_load'][hour]
+            })
+        
+        # 第一轮优化：不考虑相邻小时约束，仅考虑下网负荷约束
+        for hour in range(8760):
+            hour_params = all_hour_params[hour]
+            
+            # 获取平衡计算得到的电力负荷（考虑检修和投运计划修正后）作为基础负荷的最大值
+            max_basic_load = hour_params['max_basic_load']
+            chp_output = hour_params['chp_output']
+            pv_output = hour_params['pv_output']
+            wind_output = hour_params['wind_output']
+            max_flexible_load = hour_params['max_flexible_load']
+            min_flexible_load = hour_params['min_flexible_load']
+            current_peak_power_max = hour_params['current_peak_power_max']
+            current_peak_power_min = hour_params['current_peak_power_min']
+            
             # 定义收益计算函数
             def calculate_revenue(basic_load, flexible_load):
                 # 计算当前负荷组合下的总负荷
@@ -4428,8 +4472,32 @@ class EnergyBalanceApp:
                 
                 return revenue
             
+            # 检查下网负荷约束的函数
+            def is_feasible_min_grid_load(basic_load, flexible_load):
+                # 计算当前负荷组合下的总负荷
+                total_load = basic_load + flexible_load
+                
+                # 计算火电出力（热电联产+调峰）
+                peak_pending = total_load - chp_output - pv_output - wind_output
+                
+                # 调峰机组出力
+                peak_output = max(min(peak_pending, current_peak_power_max), current_peak_power_min)
+                
+                # 火电出力
+                thermal_output = chp_output + peak_output
+                
+                # 计算下网负荷
+                generation = pv_output + wind_output + thermal_output
+                grid_load = total_load - generation
+                
+                # 检查下网负荷约束：下网负荷不小于设置的最小下网负荷
+                if grid_load < min_grid_load:
+                    return False
+                
+                return True
+            
             # 为了优化性能，我们不使用双重优化，而是分析经济性来确定最优策略
-            # 如果基础负荷收益 > 火电成本，且基础负荷收益 > 灵活负荷收益，则尽可能使用基础负荷
+            # 如果基础负荷收益 > 火电成本，且基础负荷收益 > 灁活负荷收益，则尽可能使用基础负荷
             # 如果灵活负荷收益 > 火电成本，则使用灵活负荷
             
             best_revenue = float('-inf')
@@ -4444,13 +4512,14 @@ class EnergyBalanceApp:
                 (max_basic_load, max_flexible_load),  # 最大值
             ]
             
-            # 评估每种策略
+            # 评估每种策略，考虑约束条件
             for basic_test, flex_test in strategies:
-                revenue = calculate_revenue(basic_test, flex_test)
-                if revenue > best_revenue:
-                    best_revenue = revenue
-                    best_basic_load = basic_test
-                    best_flexible_load = flex_test
+                if is_feasible_min_grid_load(basic_test, flex_test):
+                    revenue = calculate_revenue(basic_test, flex_test)
+                    if revenue > best_revenue:
+                        best_revenue = revenue
+                        best_basic_load = basic_test
+                        best_flexible_load = flex_test
             
             # 简单线性搜索优化
             # 以较粗粒度搜索可能的组合
@@ -4461,18 +4530,160 @@ class EnergyBalanceApp:
                 basic_load = min(i * basic_step, max_basic_load)
                 for j in range(11):  # 0到10，共11个点
                     flexible_load = min(min_flexible_load + j * flex_step, max_flexible_load)
-                    revenue = calculate_revenue(basic_load, flexible_load)
-                    if revenue > best_revenue:
-                        best_revenue = revenue
-                        best_basic_load = basic_load
-                        best_flexible_load = flexible_load
+                    if is_feasible_min_grid_load(basic_load, flexible_load):
+                        revenue = calculate_revenue(basic_load, flexible_load)
+                        if revenue > best_revenue:
+                            best_revenue = revenue
+                            best_basic_load = basic_load
+                            best_flexible_load = flexible_load
             
-            # 存储优化结果
+            # 存储第一轮优化结果
             optimized_results['hourly_basic_load'][hour] = best_basic_load
             optimized_results['hourly_flexible_load'][hour] = best_flexible_load
             optimized_results['hourly_revenue'][hour] = best_revenue
             
-            total_revenue += best_revenue
+        # 第二轮优化：考虑相邻小时约束，对违反约束的小时进行调整
+        for iteration in range(3):  # 迭代几次以改善结果
+            for hour in range(8760):
+                hour_params = all_hour_params[hour]
+                
+                # 获取平衡计算得到的电力负荷（考虑检修和投运计划修正后）作为基础负荷的最大值
+                max_basic_load = hour_params['max_basic_load']
+                chp_output = hour_params['chp_output']
+                pv_output = hour_params['pv_output']
+                wind_output = hour_params['wind_output']
+                max_flexible_load = hour_params['max_flexible_load']
+                min_flexible_load = hour_params['min_flexible_load']
+                current_peak_power_max = hour_params['current_peak_power_max']
+                current_peak_power_min = hour_params['current_peak_power_min']
+                
+                # 定义收益计算函数
+                def calculate_revenue(basic_load, flexible_load):
+                    # 计算当前负荷组合下的总负荷
+                    total_load = basic_load + flexible_load
+                    
+                    # 计算火电出力（热电联产+调峰）
+                    peak_pending = total_load - chp_output - pv_output - wind_output
+                    
+                    # 调峰机组出力
+                    peak_output = max(min(peak_pending, current_peak_power_max), current_peak_power_min)
+                    
+                    # 火电出力
+                    thermal_output = chp_output + peak_output
+                    
+                    # 计算下网负荷
+                    generation = pv_output + wind_output + thermal_output
+                    grid_load = total_load - generation
+                    
+                    # 计算收益
+                    revenue = (
+                        basic_load * basic_load_revenue + 
+                        flexible_load * flexible_load_revenue - 
+                        thermal_output * thermal_cost - 
+                        pv_output * pv_cost - 
+                        wind_output * wind_cost
+                    )
+                    
+                    # 如果需要购电，减去购电成本
+                    if grid_load > 0:
+                        revenue -= grid_load * grid_price[hour] if hour < len(grid_price) else 0
+                    
+                    return revenue
+                
+                # 检查是否满足所有约束条件的函数
+                def is_feasible(basic_load, flexible_load):
+                    # 计算当前负荷组合下的总负荷
+                    total_load = basic_load + flexible_load
+                    
+                    # 计算火电出力（热电联产+调峰）
+                    peak_pending = total_load - chp_output - pv_output - wind_output
+                    
+                    # 调峰机组出力
+                    peak_output = max(min(peak_pending, current_peak_power_max), current_peak_power_min)
+                    
+                    # 火电出力
+                    thermal_output = chp_output + peak_output
+                    
+                    # 计算下网负荷
+                    generation = pv_output + wind_output + thermal_output
+                    grid_load = total_load - generation
+                    
+                    # 检查下网负荷约束：下网负荷不小于设置的最小下网负荷
+                    if grid_load < min_grid_load:
+                        return False
+                    
+                    # 检查负荷最大变动率约束：相邻小时的负荷差绝对值不大于设置值
+                    # 检查前一个小时
+                    if hour > 0:
+                        prev_total_load = optimized_results['hourly_basic_load'][hour-1] + optimized_results['hourly_flexible_load'][hour-1]
+                        load_diff = abs(total_load - prev_total_load)
+                        if load_diff > load_change_rate_limit:
+                            return False
+                    
+                    # 检查后一个小时
+                    if hour < 8759:
+                        next_total_load = optimized_results['hourly_basic_load'][hour+1] + optimized_results['hourly_flexible_load'][hour+1]
+                        load_diff = abs(total_load - next_total_load)
+                        if load_diff > load_change_rate_limit:
+                            return False
+                    
+                    return True
+                
+                # 当前的负荷组合
+                current_basic_load = optimized_results['hourly_basic_load'][hour]
+                current_flexible_load = optimized_results['hourly_flexible_load'][hour]
+                current_total_load = current_basic_load + current_flexible_load
+                
+                # 检查当前组合是否满足所有约束
+                if is_feasible(current_basic_load, current_flexible_load):
+                    continue  # 如果当前组合满足约束，跳到下一个小时
+                
+                # 如果当前组合不满足约束，尝试寻找满足约束的最优组合
+                best_revenue = float('-inf')
+                best_basic_load = current_basic_load
+                best_flexible_load = current_flexible_load
+                
+                # 测试几种策略
+                strategies = [
+                    (0, 0),  # 最小值
+                    (max_basic_load, min_flexible_load),  # 基础负荷最大，灵活负荷最小
+                    (0, max_flexible_load),  # 基础负荷最小，灵活负荷最大
+                    (max_basic_load, max_flexible_load),  # 最大值
+                ]
+                
+                # 评估每种策略，考虑所有约束条件
+                for basic_test, flex_test in strategies:
+                    if is_feasible(basic_test, flex_test):
+                        revenue = calculate_revenue(basic_test, flex_test)
+                        if revenue > best_revenue:
+                            best_revenue = revenue
+                            best_basic_load = basic_test
+                            best_flexible_load = flex_test
+                
+                # 简单线性搜索优化
+                # 以较粗粒度搜索可能的组合
+                basic_step = max_basic_load / 10 if max_basic_load > 0 else 0
+                flex_step = (max_flexible_load - min_flexible_load) / 10 if (max_flexible_load - min_flexible_load) > 0 else 0
+                
+                for i in range(11):  # 0到10，共11个点
+                    basic_load = min(i * basic_step, max_basic_load)
+                    for j in range(11):  # 0到10，共11个点
+                        flexible_load = min(min_flexible_load + j * flex_step, max_flexible_load)
+                        if is_feasible(basic_load, flexible_load):
+                            revenue = calculate_revenue(basic_load, flexible_load)
+                            if revenue > best_revenue:
+                                best_revenue = revenue
+                                best_basic_load = basic_load
+                                best_flexible_load = flexible_load
+                
+                # 更新优化结果
+                if best_revenue != float('-inf'):
+                    optimized_results['hourly_basic_load'][hour] = best_basic_load
+                    optimized_results['hourly_flexible_load'][hour] = best_flexible_load
+                    optimized_results['hourly_revenue'][hour] = best_revenue
+        
+        # 计算总收益
+        total_revenue = sum(optimized_results['hourly_revenue'])
         
         optimized_results['total_revenue'] = total_revenue
         
@@ -4508,6 +4719,8 @@ class EnergyBalanceApp:
 - 优化目标为每小时收益最大化
 - 基础负荷约束在 [0, 平衡计算得到的电力负荷（考虑了检修和投运计划修正）]
 - 灵活负荷约束在 [最小灵活负荷, 最大灵活负荷]
+- 相邻两小时负荷差绝对值不超过负荷最大变动率
+- 下网负荷不低于最小下网负荷
 - 收益 = 基础负荷×基础收益 + 灵活负荷×灵活收益 - 火电出力×火电成本 - 光伏出力×光伏成本 - 风机出力×风机成本 - 购电×电价"""        
         self.optimization_result_text.delete(1.0, tk.END)
         self.optimization_result_text.insert(tk.END, result_text)
@@ -4639,19 +4852,16 @@ class EnergyBalanceApp:
         optimized_flexible_load = [self.optimized_results['hourly_flexible_load'][i] for i in hours]
         
         # 优化后的总负荷是基础负荷和灵活负荷之和
-        optimized_total_load = [optimized_basic_load[i] + optimized_flexible_load[i] for i in hours]
+        optimized_total_load = [optimized_basic_load[i] + optimized_flexible_load[i] for i in range(len(optimized_basic_load))]
         
         # 计算优化后的下网负荷（需要重新计算，这里简化处理）
         # 假设优化后的下网负荷可以通过优化后的负荷和发电量计算得出
         # 注意：这里需要实际的计算逻辑，我们暂时使用示例数据
         try:
-            # 计算优化后的总负荷
-            optimized_total_load = [optimized_basic_load[i] + optimized_flexible_load[i] for i in hours]
-            
             # 使用平衡计算中的计算方法来估算优化后的下网负荷
             # 这里使用一个简化的逻辑，实际应用中需要更精确的计算
             optimized_grid_load = []
-            for i in hours:
+            for idx, i in enumerate(hours):
                 # 重新计算优化后的各种出力
                 chp_output = self.results['hourly_chp_output'][i]
                 pv_output = self.results['hourly_pv_output'][i]
@@ -4671,7 +4881,7 @@ class EnergyBalanceApp:
                     current_peak_power_max = self.data_model.peak_power_max
                 
                 # 计算优化后的调峰机组出力
-                peak_pending = optimized_total_load[i] - chp_output - pv_output - wind_output
+                peak_pending = optimized_total_load[idx] - chp_output - pv_output - wind_output  # 使用idx而不是i
                 peak_output = max(min(peak_pending, current_peak_power_max), current_peak_power_min)
                 thermal_output = chp_output + peak_output
                 
@@ -4679,7 +4889,7 @@ class EnergyBalanceApp:
                 generation = pv_output + wind_output + thermal_output
                 
                 # 计算优化后的下网负荷
-                optimized_grid_load_val = optimized_total_load[i] - generation
+                optimized_grid_load_val = optimized_total_load[idx] - generation  # 使用idx而不是i
                 optimized_grid_load.append(optimized_grid_load_val)
                 
         except Exception as e:
