@@ -4328,6 +4328,11 @@ class EnergyBalanceApp:
         # 执行逐小时优化
         total_revenue = 0.0
         
+        # 更新进度条
+        self.optimization_progress_label.config(text="正在预计算参数...")
+        self.optimization_progress["value"] = 0
+        self.root.update_idletasks()
+        
         # 预计算可能重复使用的值
         from datetime import datetime, timedelta
         base_date = datetime(2024, 1, 1)
@@ -4424,6 +4429,13 @@ class EnergyBalanceApp:
                 'current_peak_power_min': current_peak_power_min,
                 'max_basic_load': self.results['hourly_corrected_electric_load'][hour]
             })
+            
+            # 更新进度条
+            if hour % 1000 == 0:  # 每1000小时更新一次进度
+                progress = (hour / 8760) * 10
+                self.optimization_progress["value"] = progress
+                self.optimization_progress_label.config(text=f"正在预计算参数... {int(progress)}%")
+                self.root.update_idletasks()
         
         # 第一轮优化：不考虑相邻小时约束，仅考虑下网负荷约束
         for hour in range(8760):
@@ -4682,6 +4694,144 @@ class EnergyBalanceApp:
                     optimized_results['hourly_flexible_load'][hour] = best_flexible_load
                     optimized_results['hourly_revenue'][hour] = best_revenue
         
+        # 第三轮优化：当风光出力过高导致下网负荷小于最小下网负荷时，主动削减风光出力（弃风弃光）
+        for iteration in range(3):  # 迭代几次以改善结果
+            for hour in range(8760):
+                hour_params = all_hour_params[hour]
+                
+                # 获取当前优化结果
+                current_basic_load = optimized_results['hourly_basic_load'][hour]
+                current_flexible_load = optimized_results['hourly_flexible_load'][hour]
+                current_total_load = current_basic_load + current_flexible_load
+                
+                # 获取风光出力
+                chp_output = hour_params['chp_output']
+                pv_output = hour_params['pv_output']
+                wind_output = hour_params['wind_output']
+                max_flexible_load = hour_params['max_flexible_load']
+                min_flexible_load = hour_params['min_flexible_load']
+                current_peak_power_max = hour_params['current_peak_power_max']
+                current_peak_power_min = hour_params['current_peak_power_min']
+                
+                # 计算当前下网负荷
+                peak_pending = current_total_load - chp_output - pv_output - wind_output
+                peak_output = max(min(peak_pending, current_peak_power_max), current_peak_power_min)
+                thermal_output = chp_output + peak_output
+                generation = pv_output + wind_output + thermal_output
+                current_grid_load = current_total_load - generation
+                
+                # 如果当前下网负荷小于最小下网负荷，需要削减风光出力
+                if current_grid_load < min_grid_load:
+                    # 计算需要削减的风光出力
+                    excess_generation = generation - current_total_load + min_grid_load
+                    total_renewable = pv_output + wind_output
+                    
+                    if total_renewable > 0:
+                        # 按比例削减风光出力
+                        reduction_factor = max(0, (total_renewable - excess_generation)) / total_renewable
+                        reduced_pv_output = pv_output * reduction_factor
+                        reduced_wind_output = wind_output * reduction_factor
+                        
+                        # 重新计算火电出力
+                        peak_pending_new = current_total_load - chp_output - reduced_pv_output - reduced_wind_output
+                        peak_output_new = max(min(peak_pending_new, current_peak_power_max), current_peak_power_min)
+                        thermal_output_new = chp_output + peak_output_new
+                        
+                        # 新的发电量
+                        new_generation = reduced_pv_output + reduced_wind_output + thermal_output_new
+                        new_grid_load = current_total_load - new_generation
+                        
+                        # 如果削减后满足约束，则更新风光出力
+                        if new_grid_load >= min_grid_load:
+                            # 重新优化负荷分配，考虑到风光出力削减
+                            def calculate_revenue_after_reduction(basic_load, flexible_load):
+                                total_load = basic_load + flexible_load
+                                peak_pending_rd = total_load - chp_output - reduced_pv_output - reduced_wind_output
+                                peak_output_rd = max(min(peak_pending_rd, current_peak_power_max), current_peak_power_min)
+                                thermal_output_rd = chp_output + peak_output_rd
+                                grid_load_rd = total_load - (reduced_pv_output + reduced_wind_output + thermal_output_rd)
+                                
+                                revenue = (
+                                    basic_load * basic_load_revenue + 
+                                    flexible_load * flexible_load_revenue - 
+                                    thermal_output_rd * thermal_cost - 
+                                    reduced_pv_output * pv_cost - 
+                                    reduced_wind_output * wind_cost
+                                )
+                                
+                                if grid_load_rd > 0:
+                                    revenue -= grid_load_rd * grid_price[hour] if hour < len(grid_price) else 0
+                                
+                                return revenue
+                            
+                            def is_feasible_after_reduction(basic_load, flexible_load):
+                                total_load = basic_load + flexible_load
+                                peak_pending_rd = total_load - chp_output - reduced_pv_output - reduced_wind_output
+                                peak_output_rd = max(min(peak_pending_rd, current_peak_power_max), current_peak_power_min)
+                                thermal_output_rd = chp_output + peak_output_rd
+                                grid_load_rd = total_load - (reduced_pv_output + reduced_wind_output + thermal_output_rd)
+                                
+                                # 检查下网负荷约束
+                                if grid_load_rd < min_grid_load:
+                                    return False
+                                
+                                # 检查负荷最大变动率约束
+                                if hour > 0:
+                                    prev_total_load = optimized_results['hourly_basic_load'][hour-1] + optimized_results['hourly_flexible_load'][hour-1]
+                                    load_diff = abs(total_load - prev_total_load)
+                                    if load_diff > load_change_rate_limit:
+                                        return False
+                                
+                                if hour < 8759:
+                                    next_total_load = optimized_results['hourly_basic_load'][hour+1] + optimized_results['hourly_flexible_load'][hour+1]
+                                    load_diff = abs(total_load - next_total_load)
+                                    if load_diff > load_change_rate_limit:
+                                        return False
+                                
+                                return True
+                            
+                            # 重新优化当前小时的负荷分配
+                            best_revenue = float('-inf')
+                            best_basic_load = current_basic_load
+                            best_flexible_load = current_flexible_load
+                            
+                            # 测试几种策略
+                            strategies = [
+                                (0, 0),  # 最小值
+                                (max_basic_load, min_flexible_load),  # 基础负荷最大，灵活负荷最小
+                                (0, max_flexible_load),  # 基础负荷最小，灵活负荷最大
+                                (max_basic_load, max_flexible_load),  # 最大值
+                            ]
+                            
+                            for basic_test, flex_test in strategies:
+                                if is_feasible_after_reduction(basic_test, flex_test):
+                                    revenue = calculate_revenue_after_reduction(basic_test, flex_test)
+                                    if revenue > best_revenue:
+                                        best_revenue = revenue
+                                        best_basic_load = basic_test
+                                        best_flexible_load = flex_test
+                            
+                            # 简单线性搜索优化
+                            basic_step = max_basic_load / 10 if max_basic_load > 0 else 0
+                            flex_step = (max_flexible_load - min_flexible_load) / 10 if (max_flexible_load - min_flexible_load) > 0 else 0
+                            
+                            for i in range(11):  # 0到10，共11个点
+                                basic_load = min(i * basic_step, max_basic_load)
+                                for j in range(11):  # 0到10，共11个点
+                                    flexible_load = min(min_flexible_load + j * flex_step, max_flexible_load)
+                                    if is_feasible_after_reduction(basic_load, flexible_load):
+                                        revenue = calculate_revenue_after_reduction(basic_load, flexible_load)
+                                        if revenue > best_revenue:
+                                            best_revenue = revenue
+                                            best_basic_load = basic_load
+                                            best_flexible_load = flexible_load
+                            
+                            # 更新优化结果
+                            if best_revenue != float('-inf'):
+                                optimized_results['hourly_basic_load'][hour] = best_basic_load
+                                optimized_results['hourly_flexible_load'][hour] = best_flexible_load
+                                optimized_results['hourly_revenue'][hour] = best_revenue
+
         # 计算总收益
         total_revenue = sum(optimized_results['hourly_revenue'])
         
@@ -4721,6 +4871,56 @@ class EnergyBalanceApp:
 - 灵活负荷约束在 [最小灵活负荷, 最大灵活负荷]
 - 相邻两小时负荷差绝对值不超过负荷最大变动率
 - 下网负荷不低于最小下网负荷
+- 当风光出力过高导致下网负荷为负时，会主动削减风光出力（弃风弃光）
+- 收益 = 基础负荷×基础收益 + 灵活负荷×灵活收益 - 火电出力×火电成本 - 光伏出力×光伏成本 - 风机出力×风机成本 - 购电×电价"""        
+        self.optimization_result_text.delete(1.0, tk.END)
+        self.optimization_result_text.insert(tk.END, result_text)
+        
+        # 计算总收益
+        total_revenue = sum(optimized_results['hourly_revenue'])
+        
+        optimized_results['total_revenue'] = total_revenue
+        
+        # 将优化结果存储到实例变量中
+        self.optimized_results = optimized_results
+        
+        # 更新进度条到100%
+        self.optimization_progress["value"] = 100
+        self.optimization_progress_label.config(text="优化计算完成! 100%")
+        self.root.update_idletasks()
+        
+        # 显示优化结果摘要
+        avg_basic_load = np.mean(optimized_results['hourly_basic_load'])
+        avg_flexible_load = np.mean(optimized_results['hourly_flexible_load'])
+        
+        result_text = f"""优化计算完成!
+
+优化参数:
+基础负荷单位收益: {basic_load_revenue} 元/kWh
+灵活负荷单位收益: {flexible_load_revenue} 元/kWh
+火电发电单位成本: {thermal_cost} 元/kWh
+光伏发电单位成本: {pv_cost} 元/kWh
+风机发电单位成本: {wind_cost} 元/kWh
+
+优化结果:
+总收益: {total_revenue:,.2f} 元
+平均每小时收益: {total_revenue/8760:.2f} 元
+
+基础负荷:
+  平均值: {avg_basic_load:.2f} kW
+  范围: {min(optimized_results['hourly_basic_load']):.2f} - {max(optimized_results['hourly_basic_load']):.2f} kW
+
+灵活负荷:
+  平均值: {avg_flexible_load:.2f} kW
+  范围: {min(optimized_results['hourly_flexible_load']):.2f} - {max(optimized_results['hourly_flexible_load']):.2f} kW
+
+说明:
+- 优化目标为每小时收益最大化
+- 基础负荷约束在 [0, 平衡计算得到的电力负荷（考虑了检修和投运计划修正）]
+- 灵活负荷约束在 [最小灵活负荷, 最大灵活负荷]
+- 相邻两小时负荷差绝对值不超过负荷最大变动率
+- 下网负荷不低于最小下网负荷
+- 当风光出力过高导致下网负荷为负时，会主动削减风光出力（弃风弃光）
 - 收益 = 基础负荷×基础收益 + 灵活负荷×灵活收益 - 火电出力×火电成本 - 光伏出力×光伏成本 - 风机出力×风机成本 - 购电×电价"""        
         self.optimization_result_text.delete(1.0, tk.END)
         self.optimization_result_text.insert(tk.END, result_text)
