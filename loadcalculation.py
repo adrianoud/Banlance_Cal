@@ -4311,8 +4311,289 @@ class EnergyBalanceApp:
             messagebox.showwarning("警告", "请先进行年度平衡计算，再进行优化！")
             return
         
-        # 提示用户功能尚未实现
-        messagebox.showinfo("提示", "优化算法正在重新设计中，敬请期待！")
+        import numpy as np
+        
+        # 获取当前设置的参数
+        basic_load_revenue = self.basic_load_revenue.get()
+        flexible_load_revenue = self.flexible_load_revenue.get()
+        thermal_cost = self.thermal_cost.get()
+        pv_cost = self.pv_cost.get()
+        wind_cost = self.wind_cost.get()
+        
+        # 检查是否有计算结果可供优化
+        if not self.results:
+            messagebox.showwarning("警告", "请先进行年度平衡计算，再进行优化！")
+            return
+        
+        # 获取电价数据，使用导入的下网电价
+        grid_price = self.data_model.grid_purchase_price_hourly
+        
+        # 创建优化后的结果字典
+        optimized_results = {
+            'hourly_basic_load': [0.0] * 8760,      # 基础负荷优化值
+            'hourly_flexible_load': [0.0] * 8760,  # 灵活负荷优化值
+            'hourly_revenue': [0.0] * 8760,        # 每小时收益
+            'total_revenue': 0.0                     # 总收益
+        }
+        
+        # 更新进度条
+        self.optimization_progress_label.config(text="正在优化计算...")
+        self.optimization_progress["value"] = 0
+        self.root.update_idletasks()
+        
+        # 预计算可能重复使用的值
+        from datetime import datetime, timedelta
+        base_date = datetime(2024, 1, 1)
+        
+        # 获取约束参数
+        load_change_rate_limit = self.load_change_rate_limit.get()
+        min_grid_load = self.min_grid_load.get()
+        
+        # 逐小时优化
+        for hour in range(8760):
+            # 获取当前小时的其他参数（来自平衡计算结果）
+            chp_output = self.results['hourly_chp_output'][hour]
+            pv_output = self.results['hourly_pv_output'][hour]
+            wind_output = self.results['hourly_wind_output'][hour]
+            
+            # 当前小时的约束条件
+            max_flexible_load = self.data_model.flexible_load_max
+            min_flexible_load = self.data_model.flexible_load_min
+            
+            # 获取当前小时的日期信息
+            current_date = base_date + timedelta(hours=hour)
+            current_month = current_date.month
+            
+            # 获取当前小时的活动检修计划和投产计划
+            calculator = self.calculator
+            active_maintenance_schedules = calculator.get_active_maintenance_schedules(hour)
+            active_commissioning_schedules = calculator.get_active_commissioning_schedules(hour)
+            
+            # 预先计算修正后的调峰机组参数
+            current_peak_power_max = self.data_model.peak_power_max
+            if 5 <= current_month <= 9:  # 夏季
+                current_peak_power_min = self.data_model.peak_power_min_summer
+            else:  # 冬季
+                current_peak_power_min = self.data_model.peak_power_min_winter
+            
+            # 应用检修计划对调峰机组参数的修正
+            for schedule in active_maintenance_schedules:
+                power_type = schedule.get('power_type', '')
+                power_size = schedule.get('power_size', 0.0)
+                
+                if power_type == '调峰机组出力':
+                    current_peak_power_max = current_peak_power_max - power_size
+                    original_peak_power_max = self.data_model.peak_power_max
+                    if original_peak_power_max > 0:
+                        if 5 <= current_month <= 9:  # 夏季
+                            current_peak_power_min = self.data_model.peak_power_min_summer * (current_peak_power_max / original_peak_power_max)
+                        else:  # 冬季
+                            current_peak_power_min = self.data_model.peak_power_min_winter * (current_peak_power_max / original_peak_power_max)
+            
+            # 应用投产计划对调峰机组参数的修正
+            for schedule in active_commissioning_schedules:
+                power_type = schedule.get('power_type', '')
+                power_size = schedule.get('power_size', 0.0)
+                start_date = schedule.get('start_date', '')
+                end_date = schedule.get('end_date', '')
+                
+                interpolation_factor = calculator.calculate_interpolation_factor(hour, start_date, end_date)
+                
+                if power_type == '调峰机组最大出力':
+                    adjusted_power_size = power_size * interpolation_factor
+                    current_peak_power_max = current_peak_power_max - (power_size - adjusted_power_size)
+                elif power_type == '调峰机组夏季最小出力':
+                    adjusted_power_size = power_size * interpolation_factor
+                    if 5 <= current_month <= 9:  # 夏季：5-9月
+                        current_peak_power_min = self.data_model.peak_power_min_summer - adjusted_power_size
+                elif power_type == '调峰机组冬季最小出力':
+                    adjusted_power_size = power_size * interpolation_factor
+                    if current_date.month < 5 or current_date.month > 9:  # 冬季：10-12月和1-4月
+                        current_peak_power_min = self.data_model.peak_power_min_winter - adjusted_power_size
+                elif power_type == '调峰机组最小出力':
+                    adjusted_power_size = power_size * interpolation_factor
+                    if 5 <= current_month <= 9:  # 夏季
+                        current_peak_power_min = self.data_model.peak_power_min_summer - adjusted_power_size
+                    else:  # 冬季
+                        current_peak_power_min = self.data_model.peak_power_min_winter - adjusted_power_size
+            
+            # 获取平衡计算得到的电力负荷（考虑检修和投运计划修正后）作为基础负荷的最大值
+            max_basic_load = self.results['hourly_corrected_electric_load'][hour]
+            
+            # 根据业务需求文档的优化算法思路实现
+            # 1. 确定基础负荷范围：[current_peak_power_min, max_basic_load]
+            min_basic_load = current_peak_power_min
+            
+            # 2. 初始化基础负荷和灵活负荷为当前平衡计算结果的比例
+            current_total_load = self.results['hourly_corrected_electric_load'][hour]  # 当前总的电力负荷
+            current_basic_load = current_total_load  # 当前基础负荷等于总电力负荷
+            current_flexible_load = 0.0  # 当前灵活负荷为0
+            
+            # 3. 根据优化算法思路进行优化
+            # 计算当前状态下的火电出力
+            current_peak_pending = current_total_load - chp_output - pv_output - wind_output
+            current_peak_output = max(min(current_peak_pending, current_peak_power_max), current_peak_power_min)
+            current_thermal_output = chp_output + current_peak_output
+            current_generation = pv_output + wind_output + current_thermal_output
+            current_grid_load = current_total_load - current_generation  # 当前下网负荷
+            
+            # 判断是否有弃风弃电（当前下网负荷 <= 0）
+            has_abandoned_energy = current_grid_load <= 0
+            
+            # 初始化优化负荷
+            basic_load = max(min_basic_load, min(max_basic_load, current_basic_load))
+            flexible_load = max(min_flexible_load, min(max_flexible_load, current_flexible_load))
+            
+            # 根据业务需求文档的算法思路进行优化
+            if has_abandoned_energy:
+                # 当有弃风弃电存在时（没有下网负荷），且负荷单位收益大于风电和光伏单位成本时，应提高基础负荷或者灵活负荷
+                if basic_load_revenue > pv_cost and basic_load_revenue > wind_cost:
+                    # 提高基础负荷到最大值（在约束范围内）
+                    basic_load = max(min_basic_load, min(max_basic_load, max_basic_load))
+                
+                if flexible_load_revenue > pv_cost and flexible_load_revenue > wind_cost:
+                    # 提高灵活负荷到最大值（在约束范围内）
+                    flexible_load = max(min_flexible_load, min(max_flexible_load, max_flexible_load))
+            else:
+                # 当有下网负荷时（没有弃风弃电）
+                # 当基础负荷单位收益大于下网电价时，应提高基础负荷，反之则减小
+                if basic_load_revenue > grid_price[hour] if hour < len(grid_price) else 0:
+                    basic_load = max(min_basic_load, min(max_basic_load, max_basic_load))
+                else:
+                    basic_load = max(min_basic_load, min(max_basic_load, min_basic_load))
+                
+                # 当灵活负荷单位收益大于下网电价时，应提高灵活负荷，反之则减小
+                if flexible_load_revenue > grid_price[hour] if hour < len(grid_price) else 0:
+                    flexible_load = max(min_flexible_load, min(max_flexible_load, max_flexible_load))
+                else:
+                    flexible_load = max(min_flexible_load, min(max_flexible_load, min_flexible_load))
+            
+            # 确保基础负荷不低于调峰机组最小出力
+            basic_load = max(basic_load, min_basic_load)
+            
+            # 再次检查是否满足最小下网负荷约束，如果需要进一步调整
+            total_load = basic_load + flexible_load
+            peak_pending = total_load - chp_output - pv_output - wind_output
+            peak_output = max(min(peak_pending, current_peak_power_max), current_peak_power_min)
+            thermal_output = chp_output + peak_output
+            generation = pv_output + wind_output + thermal_output
+            grid_load = total_load - generation
+            
+            if grid_load < min_grid_load:
+                # 如果仍然不满足最小下网负荷约束，需要进一步调整
+                required_additional_load = min_grid_load - grid_load
+                # 优先增加基础负荷，但如果超过最大值则分配给灵活负荷
+                potential_basic_load = basic_load + required_additional_load
+                if potential_basic_load <= max_basic_load:
+                    basic_load = potential_basic_load
+                else:
+                    basic_load = max_basic_load
+                    remaining_load = potential_basic_load - max_basic_load
+                    flexible_load = min(flexible_load + remaining_load, max_flexible_load)
+                
+                # 重新计算所有相关值
+                total_load = basic_load + flexible_load
+                peak_pending = total_load - chp_output - pv_output - wind_output
+                peak_output = max(min(peak_pending, current_peak_power_max), current_peak_power_min)
+                thermal_output = chp_output + peak_output
+                generation = pv_output + wind_output + thermal_output
+                grid_load = total_load - generation
+            
+            # 应用到结果中
+            optimized_results['hourly_basic_load'][hour] = basic_load
+            optimized_results['hourly_flexible_load'][hour] = flexible_load
+            
+            # 计算收益
+            total_load = basic_load + flexible_load
+            peak_pending = total_load - chp_output - pv_output - wind_output
+            peak_output = max(min(peak_pending, current_peak_power_max), current_peak_power_min)
+            thermal_output = chp_output + peak_output
+            generation = pv_output + wind_output + thermal_output
+            grid_load = total_load - generation
+            
+            # 确保下网负荷不低于最小下网负荷
+            if grid_load < min_grid_load:
+                # 如果下网负荷低于最小值，需要调整负荷分配
+                # 通过增加基础负荷来满足最小下网负荷约束
+                required_additional_load = min_grid_load - grid_load
+                basic_load = basic_load + required_additional_load
+                total_load = basic_load + flexible_load
+                
+                # 重新计算调峰机组出力
+                peak_pending = total_load - chp_output - pv_output - wind_output
+                peak_output = max(min(peak_pending, current_peak_power_max), current_peak_power_min)
+                thermal_output = chp_output + peak_output
+                generation = pv_output + wind_output + thermal_output
+                grid_load = total_load - generation
+            
+            revenue = (
+                basic_load * basic_load_revenue + 
+                flexible_load * flexible_load_revenue - 
+                thermal_output * thermal_cost - 
+                pv_output * pv_cost - 
+                wind_output * wind_cost
+            )
+            
+            if grid_load > 0:
+                revenue -= grid_load * grid_price[hour] if hour < len(grid_price) else 0
+            
+            optimized_results['hourly_revenue'][hour] = revenue
+            
+            # 更新进度条
+            if hour % 500 == 0:  # 每500小时更新一次进度
+                progress = (hour / 8760) * 100
+                self.optimization_progress["value"] = progress
+                self.optimization_progress_label.config(text=f"正在优化计算... {int(progress)}%")
+                self.root.update_idletasks()
+        
+        # 计算总收益
+        total_revenue = sum(optimized_results['hourly_revenue'])
+        optimized_results['total_revenue'] = total_revenue
+        
+        # 将优化结果存储到实例变量中
+        self.optimized_results = optimized_results
+        
+        # 更新进度条到100%
+        self.optimization_progress["value"] = 100
+        self.optimization_progress_label.config(text="优化计算完成! 100%")
+        self.root.update_idletasks()
+        
+        # 显示优化结果摘要
+        avg_basic_load = np.mean(optimized_results['hourly_basic_load'])
+        avg_flexible_load = np.mean(optimized_results['hourly_flexible_load'])
+        
+        result_text = f"""优化计算完成!
+
+优化参数:
+基础负荷单位收益: {basic_load_revenue} 元/kWh
+灵活负荷单位收益: {flexible_load_revenue} 元/kWh
+火电发电单位成本: {thermal_cost} 元/kWh
+光伏发电单位成本: {pv_cost} 元/kWh
+风机发电单位成本: {wind_cost} 元/kWh
+
+优化结果:
+总收益: {total_revenue:,.2f} 元
+平均每小时收益: {total_revenue/8760:.2f} 元
+
+基础负荷:
+  平均值: {avg_basic_load:.2f} kW
+  范围: {min(optimized_results['hourly_basic_load']):.2f} - {max(optimized_results['hourly_basic_load']):.2f} kW
+
+灵活负荷:
+  平均值: {avg_flexible_load:.2f} kW
+  范围: {min(optimized_results['hourly_flexible_load']):.2f} - {max(optimized_results['hourly_flexible_load']):.2f} kW
+
+说明:
+- 优化目标为每小时收益最大化
+- 基础负荷约束在 [当前季节调峰机组最小出力, 平衡计算得到的电力负荷（考虑了检修和投运计划修正）]
+- 灵活负荷约束在 [最小灵活负荷, 最大灵活负荷]"""        
+        self.optimization_result_text.delete(1.0, tk.END)
+        self.optimization_result_text.insert(tk.END, result_text)
+        
+        # 保存优化结果到当前项目
+        self.save_current_project()
+        
+        messagebox.showinfo("完成", "优化计算已完成！")
 
 
         
@@ -4426,15 +4707,6 @@ class EnergyBalanceApp:
         # 获取时间段内的数据
         hours = list(range(start_hour, end_hour + 1))
         
-        # 获取平衡计算结果（优化前）
-        original_total_load = [self.results['hourly_corrected_electric_load'][i] for i in hours]
-        original_grid_load = [self.results['hourly_grid_load'][i] for i in hours]
-        
-        # 对于优化前，我们将原始负荷视为基础负荷（因为优化前没有明确的负荷分解）
-        original_basic_load = [self.results['hourly_corrected_electric_load'][i] for i in hours]
-        # 优化前没有灵活负荷的概念，所以设为0
-        original_flexible_load = [0.0 for i in hours]
-        
         # 获取优化结果
         optimized_basic_load = [self.optimized_results['hourly_basic_load'][i] for i in hours]
         optimized_flexible_load = [self.optimized_results['hourly_flexible_load'][i] for i in hours]
@@ -4442,18 +4714,19 @@ class EnergyBalanceApp:
         # 优化后的总负荷是基础负荷和灵活负荷之和
         optimized_total_load = [optimized_basic_load[i] + optimized_flexible_load[i] for i in range(len(optimized_basic_load))]
         
-        # 计算优化后的下网负荷（需要重新计算，这里简化处理）
-        # 假设优化后的下网负荷可以通过优化后的负荷和发电量计算得出
-        # 注意：这里需要实际的计算逻辑，我们暂时使用示例数据
+        # 计算优化后的各发电设备出力
         try:
-            # 使用平衡计算中的计算方法来估算优化后的下网负荷
-            # 这里使用一个简化的逻辑，实际应用中需要更精确的计算
+            # 计算优化后的光伏出力、风机出力和调峰机组出力
+            optimized_pv_output = []
+            optimized_wind_output = []
+            optimized_peak_output = []
             optimized_grid_load = []
+            
             for idx, i in enumerate(hours):
-                # 重新计算优化后的各种出力
-                chp_output = self.results['hourly_chp_output'][i]
+                # 获取原始的光伏和风机出力（这些不受负荷优化直接影响）
                 pv_output = self.results['hourly_pv_output'][i]
                 wind_output = self.results['hourly_wind_output'][i]
+                chp_output = self.results['hourly_chp_output'][i]
                 
                 # 获取当前小时的修正后调峰机组参数
                 from datetime import datetime, timedelta
@@ -4461,44 +4734,97 @@ class EnergyBalanceApp:
                 current_date = base_date + timedelta(hours=i)
                 current_month = current_date.month
                 
+                # 初始化当前小时的调峰机组参数
+                current_peak_power_max = self.data_model.peak_power_max
                 if 5 <= current_month <= 9:  # 夏季
                     current_peak_power_min = self.data_model.peak_power_min_summer
-                    current_peak_power_max = self.data_model.peak_power_max
                 else:  # 冬季
                     current_peak_power_min = self.data_model.peak_power_min_winter
-                    current_peak_power_max = self.data_model.peak_power_max
+                
+                # 获取当前小时的活动检修计划和投产计划
+                calculator = self.calculator
+                active_maintenance_schedules = calculator.get_active_maintenance_schedules(i)
+                active_commissioning_schedules = calculator.get_active_commissioning_schedules(i)
+                
+                # 应用检修计划对调峰机组参数的修正
+                for schedule in active_maintenance_schedules:
+                    power_type = schedule.get('power_type', '')
+                    power_size = schedule.get('power_size', 0.0)
+                    
+                    if power_type == '调峰机组出力':
+                        current_peak_power_max = current_peak_power_max - power_size
+                        original_peak_power_max = self.data_model.peak_power_max
+                        if original_peak_power_max > 0:
+                            if 5 <= current_month <= 9:  # 夏季
+                                current_peak_power_min = self.data_model.peak_power_min_summer * (current_peak_power_max / original_peak_power_max)
+                            else:  # 冬季
+                                current_peak_power_min = self.data_model.peak_power_min_winter * (current_peak_power_max / original_peak_power_max)
+                
+                # 应用投产计划对调峰机组参数的修正
+                for schedule in active_commissioning_schedules:
+                    power_type = schedule.get('power_type', '')
+                    power_size = schedule.get('power_size', 0.0)
+                    start_date = schedule.get('start_date', '')
+                    end_date = schedule.get('end_date', '')
+                    
+                    interpolation_factor = calculator.calculate_interpolation_factor(i, start_date, end_date)
+                    
+                    if power_type == '调峰机组最大出力':
+                        adjusted_power_size = power_size * interpolation_factor
+                        current_peak_power_max = current_peak_power_max - (power_size - adjusted_power_size)
+                    elif power_type == '调峰机组夏季最小出力':
+                        adjusted_power_size = power_size * interpolation_factor
+                        if 5 <= current_month <= 9:  # 夏季：5-9月
+                            current_peak_power_min = self.data_model.peak_power_min_summer - adjusted_power_size
+                    elif power_type == '调峰机组冬季最小出力':
+                        adjusted_power_size = power_size * interpolation_factor
+                        if current_date.month < 5 or current_date.month > 9:  # 冬季：10-12月和1-4月
+                            current_peak_power_min = self.data_model.peak_power_min_winter - adjusted_power_size
+                    elif power_type == '调峰机组最小出力':
+                        adjusted_power_size = power_size * interpolation_factor
+                        if 5 <= current_month <= 9:  # 夏季
+                            current_peak_power_min = self.data_model.peak_power_min_summer - adjusted_power_size
+                        else:  # 冬季
+                            current_peak_power_min = self.data_model.peak_power_min_winter - adjusted_power_size
                 
                 # 计算优化后的调峰机组出力
-                peak_pending = optimized_total_load[idx] - chp_output - pv_output - wind_output  # 使用idx而不是i
+                peak_pending = optimized_total_load[idx] - chp_output - pv_output - wind_output
                 peak_output = max(min(peak_pending, current_peak_power_max), current_peak_power_min)
-                thermal_output = chp_output + peak_output
                 
-                # 计算发电总量
-                generation = pv_output + wind_output + thermal_output
+                # 保存计算结果
+                optimized_pv_output.append(pv_output)
+                optimized_wind_output.append(wind_output)
+                optimized_peak_output.append(peak_output)
                 
                 # 计算优化后的下网负荷
-                optimized_grid_load_val = optimized_total_load[idx] - generation  # 使用idx而不是i
+                thermal_output = chp_output + peak_output
+                generation = pv_output + wind_output + thermal_output
+                optimized_grid_load_val = optimized_total_load[idx] - generation
                 optimized_grid_load.append(optimized_grid_load_val)
                 
         except Exception as e:
-            print(f"计算优化后下网负荷时出错: {e}")
-            # 如果计算出错，使用原始的下网负荷数据
+            print(f"计算优化后发电出力时出错: {e}")
+            # 如果计算出错，使用原始的发电出力数据
+            optimized_pv_output = [self.results['hourly_pv_output'][i] for i in hours]
+            optimized_wind_output = [self.results['hourly_wind_output'][i] for i in hours]
+            optimized_peak_output = [self.results['hourly_peak_output'][i] for i in hours]
             optimized_grid_load = [self.results['hourly_grid_load'][i] for i in hours]
         
         # 将小时转换为日期格式（从2025-01-01开始）
         from datetime import datetime, timedelta
         dates = [datetime(2025, 1, 1) + timedelta(hours=h) for h in hours]
         
-        # 绘制优化前后的对比图（不包括优化前灵活负荷）
-        line_orig_basic, = self.optimization_ax.plot(dates, original_basic_load, label='修正后电力负荷(优化前)', linewidth=0.8, color='blue', linestyle='--')
+        # 绘制优化后的发电出力图
         line_opt_basic, = self.optimization_ax.plot(dates, optimized_basic_load, label='基础负荷(优化后)', linewidth=0.8, color='blue', linestyle='-')
         line_opt_flex, = self.optimization_ax.plot(dates, optimized_flexible_load, label='灵活负荷(优化后)', linewidth=0.8, color='orange', linestyle='-')
-        line_orig_grid, = self.optimization_ax.plot(dates, original_grid_load, label='下网负荷(优化前)', linewidth=0.8, color='red', linestyle='--')
+        line_pv_output, = self.optimization_ax.plot(dates, optimized_pv_output, label='光伏出力(优化后)', linewidth=0.8, color='green', linestyle='-')
+        line_wind_output, = self.optimization_ax.plot(dates, optimized_wind_output, label='风机出力(优化后)', linewidth=0.8, color='cyan', linestyle='-')
+        line_peak_output, = self.optimization_ax.plot(dates, optimized_peak_output, label='调峰机组出力(优化后)', linewidth=0.8, color='purple', linestyle='-')
         line_opt_grid, = self.optimization_ax.plot(dates, optimized_grid_load, label='下网负荷(优化后)', linewidth=0.8, color='red', linestyle='-')
         
         self.optimization_ax.set_xlabel('日期 (MM-DD)')
         self.optimization_ax.set_ylabel('功率 (kW)')
-        self.optimization_ax.set_title('优化前后负荷对比趋势图')
+        self.optimization_ax.set_title('优化后负荷与发电出力趋势图')
         
         # 设置x轴日期格式
         self.optimization_ax.xaxis.set_major_formatter(plt.matplotlib.dates.DateFormatter('%m-%d'))
@@ -4521,7 +4847,7 @@ class EnergyBalanceApp:
         legend = self.optimization_ax.legend(loc='upper left', bbox_to_anchor=(1, 1))  # 固定图例位置
         
         # 启用图例点击交互
-        lines = [line_orig_basic, line_opt_basic, line_opt_flex, line_orig_grid, line_opt_grid]
+        lines = [line_opt_basic, line_opt_flex, line_pv_output, line_wind_output, line_peak_output, line_opt_grid]
         
         # 为线条图例启用点击
         lined = {}
