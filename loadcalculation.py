@@ -4771,13 +4771,60 @@ class EnergyBalanceApp:
                             # 已收敛，跳出迭代循环
                             break
                     
-                    # 计算最终的发电和负荷数据
+                    # 根据优化后的负荷情况重新计算风光出力
+                    # 获取当前小时的原始气象数据
+                    solar_irradiance = self.data_model.solar_irradiance_hourly[i]
+                    wind_speed = self.data_model.wind_speed_hourly[i]
+                    
+                    # 重新计算光伏出力（考虑出力限制计划）
+                    pv_output = 0.0
+                    for model in self.data_model.pv_models:
+                        pv_output += pv_power_function(solar_irradiance, model)
+                    
+                    # 应用出力限制计划对光伏出力的修正
+                    active_output_limits = calculator.get_active_output_limit_schedules(i, '光伏最大出力限制')
+                    if active_output_limits:
+                        min_limit = min(schedule.get('power_size', float('inf')) for schedule in active_output_limits)
+                        pv_output = min(pv_output, min_limit)
+                    
+                    # 重新计算风机出力（考虑出力限制计划）
+                    wind_output = 0.0
+                    for model in self.data_model.wind_turbine_models:
+                        wind_output += wind_power_function(wind_speed, model)
+                    
+                    # 应用出力限制计划对风机出力的修正
+                    active_wind_limits = calculator.get_active_output_limit_schedules(i, '风机最大出力限制')
+                    if active_wind_limits:
+                        min_limit = min(schedule.get('power_size', float('inf')) for schedule in active_wind_limits)
+                        wind_output = min(wind_output, min_limit)
+                    
+                    # 重新计算发电总量和下网负荷
                     generation = pv_output + wind_output + thermal_output
                     grid_load = total_load - generation
                     
-                    # 弃风光率保持不变（由风光出力和弃风弃光电量决定）
-                    abandon_rate = self.results['hourly_abandon_rate'][i]
-                    wind_pv_actual = self.results['hourly_wind_pv_actual'][i]
+                    # 重新计算弃风光相关数据
+                    peak_pending = total_load - chp_output - pv_output - wind_output
+                    wind_pv_abandon = max(current_peak_power_min - peak_pending, 0)
+                    
+                    # 计算灵活负荷消纳
+                    if wind_pv_abandon < self.data_model.flexible_load_min:
+                        actual_flexible_load = 0.0
+                    elif wind_pv_abandon <= self.data_model.flexible_load_max:
+                        actual_flexible_load = wind_pv_abandon
+                    else:
+                        actual_flexible_load = self.data_model.flexible_load_max
+                    
+                    # 修正后的风机光伏放弃出力
+                    corrected_wind_pv_abandon = max(wind_pv_abandon - actual_flexible_load, 0)
+                    
+                    # 风机光伏实际出力
+                    wind_pv_actual = (pv_output + wind_output) - corrected_wind_pv_abandon
+                    
+                    # 弃风光率
+                    if (pv_output + wind_output) > 0:
+                        abandon_rate = corrected_wind_pv_abandon / (pv_output + wind_output)
+                    else:
+                        abandon_rate = 0.0
                     
                     optimized_internal_load.append(internal_electric_load)
                     optimized_total_load.append(total_load)
@@ -4963,9 +5010,33 @@ class EnergyBalanceApp:
                 internal_electric_load = initial_total_load * self.data_model.internal_electric_rate
                 total_load = initial_total_load + internal_electric_load
                 
-                # 获取当前小时的发电数据
-                pv_output = self.results['hourly_pv_output'][i]
-                wind_output = self.results['hourly_wind_output'][i]
+                # 获取当前小时的气象数据
+                solar_irradiance = self.data_model.solar_irradiance_hourly[i]
+                wind_speed = self.data_model.wind_speed_hourly[i]
+                
+                # 重新计算光伏出力（考虑出力限制计划）
+                pv_output = 0.0
+                for model in self.data_model.pv_models:
+                    pv_output += pv_power_function(solar_irradiance, model)
+                
+                # 应用出力限制计划对光伏出力的修正
+                active_pv_limits = calculator.get_active_output_limit_schedules(i, '光伏最大出力限制')
+                if active_pv_limits:
+                    min_limit = min(schedule.get('power_size', float('inf')) for schedule in active_pv_limits)
+                    pv_output = min(pv_output, min_limit)
+                
+                # 重新计算风机出力（考虑出力限制计划）
+                wind_output = 0.0
+                for model in self.data_model.wind_turbine_models:
+                    wind_output += wind_power_function(wind_speed, model)
+                
+                # 应用出力限制计划对风机出力的修正
+                active_wind_limits = calculator.get_active_output_limit_schedules(i, '风机最大出力限制')
+                if active_wind_limits:
+                    min_limit = min(schedule.get('power_size', float('inf')) for schedule in active_wind_limits)
+                    wind_output = min(wind_output, min_limit)
+                
+                # 获取热电出力
                 chp_output = self.results['hourly_chp_output'][i]
                 
                 # 获取当前小时的修正后调峰机组参数
