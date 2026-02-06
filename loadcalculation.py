@@ -4625,7 +4625,7 @@ class EnergyBalanceApp:
                 # 计算优化前的各项数据
                 original_basic_load = self.results['hourly_corrected_electric_load']  # 修正后电力负荷
                 original_internal_load = self.results['hourly_internal_electric_load']  # 厂用电负荷
-                original_flexible_load = [0.0] * 8760  # 优化前没有灵活负荷概念
+                original_flexible_load = self.results['hourly_flexible_load_consumption']  # 优化前灵活负荷（来自平衡计算的消纳量）
                 original_total_load = self.results['hourly_total_load']  # 总负荷
                 original_peak_output = self.results['hourly_peak_output']  # 调峰机组出力
                 original_wind_pv_actual = self.results['hourly_wind_pv_actual']  # 光伏风机实际出力
@@ -4674,30 +4674,104 @@ class EnergyBalanceApp:
                 optimized_abandon_rate = []
                 
                 for i in range(8760):
-                    # 计算优化后的厂用电负荷（基于优化后的火电出力）
-                    chp_output = self.results['hourly_chp_output'][i]
-                    pv_output = self.results['hourly_pv_output'][i]
-                    wind_output = self.results['hourly_wind_output'][i]
+                    # 使用迭代方法计算优化后的厂用电负荷和总负荷，解决循环依赖问题
+                    # 初始化：基础负荷 + 灵活负荷作为初始总负荷
+                    basic_load = optimized_basic_load[i]
+                    flexible_load = optimized_flexible_load[i]
+                    initial_total_load = basic_load + flexible_load
                     
-                    # 获取当前小时的修正后调峰机组参数
-                    calc_base_date = datetime(2024, 1, 1)
-                    current_date = calc_base_date + timedelta(hours=i)
-                    current_month = current_date.month
+                    # 使用平衡计算中的迭代方法
+                    max_iterations = 10  # 最大迭代次数
+                    tolerance = 1e-6     # 收敛阈值
                     
-                    current_peak_power_max = self.data_model.peak_power_max
-                    if 5 <= current_month <= 9:  # 夏季
-                        current_peak_power_min = self.data_model.peak_power_min_summer
-                    else:  # 冬季
-                        current_peak_power_min = self.data_model.peak_power_min_winter
+                    # 初始化厂用电负荷和总负荷
+                    internal_electric_load = initial_total_load * self.data_model.internal_electric_rate
+                    total_load = initial_total_load + internal_electric_load
                     
-                    # 计算优化后的调峰机组出力
-                    total_load = optimized_basic_load[i] + optimized_flexible_load[i]
-                    peak_pending = total_load - chp_output - pv_output - wind_output
-                    peak_output = max(min(peak_pending, current_peak_power_max), current_peak_power_min)
-                    thermal_output = chp_output + peak_output
+                    for iteration in range(max_iterations):
+                        # 保存上一次的值用于比较
+                        prev_total_load = total_load
+                        
+                        # 获取当前小时的发电数据
+                        chp_output = self.results['hourly_chp_output'][i]
+                        pv_output = self.results['hourly_pv_output'][i]
+                        wind_output = self.results['hourly_wind_output'][i]
+                        
+                        # 获取当前小时的修正后调峰机组参数
+                        calc_base_date = datetime(2024, 1, 1)
+                        current_date = calc_base_date + timedelta(hours=i)
+                        current_month = current_date.month
+                        
+                        current_peak_power_max = self.data_model.peak_power_max
+                        if 5 <= current_month <= 9:  # 夏季
+                            current_peak_power_min = self.data_model.peak_power_min_summer
+                        else:  # 冬季
+                            current_peak_power_min = self.data_model.peak_power_min_winter
+                        
+                        # 获取当前小时的活动检修计划和投产计划
+                        calculator = self.calculator
+                        active_maintenance_schedules = calculator.get_active_maintenance_schedules(i)
+                        active_commissioning_schedules = calculator.get_active_commissioning_schedules(i)
+                        
+                        # 应用检修计划对调峰机组参数的修正
+                        for schedule in active_maintenance_schedules:
+                            power_type = schedule.get('power_type', '')
+                            power_size = schedule.get('power_size', 0.0)
+                            
+                            if power_type == '调峰机组出力':
+                                current_peak_power_max = current_peak_power_max - power_size
+                                original_peak_power_max = self.data_model.peak_power_max
+                                if original_peak_power_max > 0:
+                                    if 5 <= current_month <= 9:  # 夏季
+                                        current_peak_power_min = self.data_model.peak_power_min_summer * (current_peak_power_max / original_peak_power_max)
+                                    else:  # 冬季
+                                        current_peak_power_min = self.data_model.peak_power_min_winter * (current_peak_power_max / original_peak_power_max)
+                        
+                        # 应用投产计划对调峰机组参数的修正
+                        for schedule in active_commissioning_schedules:
+                            power_type = schedule.get('power_type', '')
+                            power_size = schedule.get('power_size', 0.0)
+                            start_date = schedule.get('start_date', '')
+                            end_date = schedule.get('end_date', '')
+                            
+                            interpolation_factor = calculator.calculate_interpolation_factor(i, start_date, end_date)
+                            
+                            if power_type == '调峰机组最大出力':
+                                adjusted_power_size = power_size * interpolation_factor
+                                current_peak_power_max = current_peak_power_max - (power_size - adjusted_power_size)
+                            elif power_type == '调峰机组夏季最小出力':
+                                adjusted_power_size = power_size * interpolation_factor
+                                if 5 <= current_month <= 9:  # 夏季：5-9月
+                                    current_peak_power_min = self.data_model.peak_power_min_summer - adjusted_power_size
+                            elif power_type == '调峰机组冬季最小出力':
+                                adjusted_power_size = power_size * interpolation_factor
+                                if current_date.month < 5 or current_date.month > 9:  # 冬季：10-12月和1-4月
+                                    current_peak_power_min = self.data_model.peak_power_min_winter - adjusted_power_size
+                            elif power_type == '调峰机组最小出力':
+                                adjusted_power_size = power_size * interpolation_factor
+                                if 5 <= current_month <= 9:  # 夏季
+                                    current_peak_power_min = self.data_model.peak_power_min_summer - adjusted_power_size
+                                else:  # 冬季
+                                    current_peak_power_min = self.data_model.peak_power_min_winter - adjusted_power_size
+                        
+                        # 计算调峰机组出力
+                        peak_pending = total_load - chp_output - pv_output - wind_output
+                        peak_output = max(min(peak_pending, current_peak_power_max), current_peak_power_min)
+                        thermal_output = chp_output + peak_output
+                        
+                        # 使用新的公式计算厂用电负荷: 厂用电负荷 = 火电出力 * 厂用电率
+                        internal_electric_load = thermal_output * self.data_model.internal_electric_rate
+                        
+                        # 重新计算总负荷
+                        total_load = initial_total_load + internal_electric_load
+                        
+                        # 检查收敛性
+                        load_diff = abs(total_load - prev_total_load)
+                        if load_diff < tolerance:
+                            # 已收敛，跳出迭代循环
+                            break
                     
-                    # 计算厂用电负荷
-                    internal_load = thermal_output * self.data_model.internal_electric_rate
+                    # 计算最终的发电和负荷数据
                     generation = pv_output + wind_output + thermal_output
                     grid_load = total_load - generation
                     
@@ -4705,7 +4779,7 @@ class EnergyBalanceApp:
                     abandon_rate = self.results['hourly_abandon_rate'][i]
                     wind_pv_actual = self.results['hourly_wind_pv_actual'][i]
                     
-                    optimized_internal_load.append(internal_load)
+                    optimized_internal_load.append(internal_electric_load)
                     optimized_total_load.append(total_load)
                     optimized_peak_output.append(peak_output)
                     optimized_wind_pv_actual.append(wind_pv_actual)
@@ -4811,9 +4885,9 @@ class EnergyBalanceApp:
                     f.write(f"总收益(优化后): {self.optimized_results['total_revenue']:.2f} 元\n")
                     f.write(f"收益改善: {self.optimized_results['total_revenue'] - sum(original_revenue):.2f} 元\n\n")
                     f.write("每小时优化结果对比 (前10小时示例):\n")
-                    f.write("小时,优化前负荷(kW),优化后负荷(kW),优化前收益(元),优化后收益(元),收益差(元)\n")
+                    f.write("小时,优化前基础负荷(kW),优化前灵活负荷(kW),优化后基础负荷(kW),优化后灵活负荷(kW),优化前收益(元),优化后收益(元),收益差(元)\n")
                     for i in range(min(10, 8760)):
-                        f.write(f"{i},{original_basic_load[i]:.2f},{optimized_basic_load[i]:.2f},{original_revenue[i]:.2f},{optimized_revenue[i]:.2f},{optimized_revenue[i]-original_revenue[i]:.2f}\n")
+                        f.write(f"{i},{original_basic_load[i]:.2f},{original_flexible_load[i]:.2f},{optimized_basic_load[i]:.2f},{optimized_flexible_load[i]:.2f},{original_revenue[i]:.2f},{optimized_revenue[i]:.2f},{optimized_revenue[i]-original_revenue[i]:.2f}\n")
                 messagebox.showinfo("成功", f"优化结果已导出至:\n{txt_save_path} (由于缺少pandas库，以文本格式导出)")
             except Exception as e:
                 messagebox.showerror("错误", f"导出优化结果失败:\n{str(e)}")
@@ -4865,19 +4939,31 @@ class EnergyBalanceApp:
         optimized_basic_load = [self.optimized_results['hourly_basic_load'][i] for i in hours]
         optimized_flexible_load = [self.optimized_results['hourly_flexible_load'][i] for i in hours]
         
-        # 优化后的总负荷是基础负荷和灵活负荷之和
-        optimized_total_load = [optimized_basic_load[i] + optimized_flexible_load[i] for i in range(len(optimized_basic_load))]
-        
-        # 计算优化后的各发电设备出力
+        # 计算优化后的各发电设备出力和负荷（包含厂用电负荷的迭代计算）
         try:
-            # 计算优化后的光伏出力、风机出力和调峰机组出力
+            # 计算优化后的光伏出力、风机出力、调峰机组出力、总负荷等
             optimized_pv_output = []
             optimized_wind_output = []
             optimized_peak_output = []
             optimized_grid_load = []
+            optimized_internal_load = []
+            optimized_total_load = []
             
             for idx, i in enumerate(hours):
-                # 获取原始的光伏和风机出力（这些不受负荷优化直接影响）
+                # 使用迭代方法计算优化后的厂用电负荷和总负荷
+                basic_load = optimized_basic_load[idx]
+                flexible_load = optimized_flexible_load[idx]
+                initial_total_load = basic_load + flexible_load
+                
+                # 使用平衡计算中的迭代方法
+                max_iterations = 10  # 最大迭代次数
+                tolerance = 1e-6     # 收敛阈值
+                
+                # 初始化厂用电负荷和总负荷
+                internal_electric_load = initial_total_load * self.data_model.internal_electric_rate
+                total_load = initial_total_load + internal_electric_load
+                
+                # 获取当前小时的发电数据
                 pv_output = self.results['hourly_pv_output'][i]
                 wind_output = self.results['hourly_wind_output'][i]
                 chp_output = self.results['hourly_chp_output'][i]
@@ -4888,7 +4974,6 @@ class EnergyBalanceApp:
                 current_date = base_date + timedelta(hours=i)
                 current_month = current_date.month
                 
-                # 初始化当前小时的调峰机组参数
                 current_peak_power_max = self.data_model.peak_power_max
                 if 5 <= current_month <= 9:  # 夏季
                     current_peak_power_min = self.data_model.peak_power_min_summer
@@ -4941,20 +5026,39 @@ class EnergyBalanceApp:
                         else:  # 冬季
                             current_peak_power_min = self.data_model.peak_power_min_winter - adjusted_power_size
                 
-                # 计算优化后的调峰机组出力
-                peak_pending = optimized_total_load[idx] - chp_output - pv_output - wind_output
-                peak_output = max(min(peak_pending, current_peak_power_max), current_peak_power_min)
+                # 迭代计算厂用电负荷和总负荷
+                for iteration in range(max_iterations):
+                    # 保存上一次的值用于比较
+                    prev_total_load = total_load
+                    
+                    # 计算调峰机组出力
+                    peak_pending = total_load - chp_output - pv_output - wind_output
+                    peak_output = max(min(peak_pending, current_peak_power_max), current_peak_power_min)
+                    thermal_output = chp_output + peak_output
+                    
+                    # 使用新的公式计算厂用电负荷: 厂用电负荷 = 火电出力 * 厂用电率
+                    internal_electric_load = thermal_output * self.data_model.internal_electric_rate
+                    
+                    # 重新计算总负荷
+                    total_load = initial_total_load + internal_electric_load
+                    
+                    # 检查收敛性
+                    load_diff = abs(total_load - prev_total_load)
+                    if load_diff < tolerance:
+                        # 已收敛，跳出迭代循环
+                        break
+                
+                # 计算最终的发电和负荷数据
+                generation = pv_output + wind_output + thermal_output
+                grid_load = total_load - generation
                 
                 # 保存计算结果
                 optimized_pv_output.append(pv_output)
                 optimized_wind_output.append(wind_output)
                 optimized_peak_output.append(peak_output)
-                
-                # 计算优化后的下网负荷
-                thermal_output = chp_output + peak_output
-                generation = pv_output + wind_output + thermal_output
-                optimized_grid_load_val = optimized_total_load[idx] - generation
-                optimized_grid_load.append(optimized_grid_load_val)
+                optimized_grid_load.append(grid_load)
+                optimized_internal_load.append(internal_electric_load)
+                optimized_total_load.append(total_load)
                 
         except Exception as e:
             print(f"计算优化后发电出力时出错: {e}")
@@ -4971,6 +5075,8 @@ class EnergyBalanceApp:
         # 绘制优化后的发电出力图
         line_opt_basic, = self.optimization_ax.plot(dates, optimized_basic_load, label='基础负荷(优化后)', linewidth=0.8, color='blue', linestyle='-')
         line_opt_flex, = self.optimization_ax.plot(dates, optimized_flexible_load, label='灵活负荷(优化后)', linewidth=0.8, color='orange', linestyle='-')
+        line_opt_total, = self.optimization_ax.plot(dates, optimized_total_load, label='总负荷(优化后)', linewidth=0.8, color='gray', linestyle='-')
+        line_opt_internal, = self.optimization_ax.plot(dates, optimized_internal_load, label='厂用电负荷(优化后)', linewidth=0.8, color='brown', linestyle='-')
         line_pv_output, = self.optimization_ax.plot(dates, optimized_pv_output, label='光伏出力(优化后)', linewidth=0.8, color='green', linestyle='-')
         line_wind_output, = self.optimization_ax.plot(dates, optimized_wind_output, label='风机出力(优化后)', linewidth=0.8, color='cyan', linestyle='-')
         line_peak_output, = self.optimization_ax.plot(dates, optimized_peak_output, label='调峰机组出力(优化后)', linewidth=0.8, color='purple', linestyle='-')
@@ -5001,7 +5107,7 @@ class EnergyBalanceApp:
         legend = self.optimization_ax.legend(loc='upper left', bbox_to_anchor=(1, 1))  # 固定图例位置
         
         # 启用图例点击交互
-        lines = [line_opt_basic, line_opt_flex, line_pv_output, line_wind_output, line_peak_output, line_opt_grid]
+        lines = [line_opt_basic, line_opt_flex, line_opt_total, line_opt_internal, line_pv_output, line_wind_output, line_peak_output, line_opt_grid]
         
         # 为线条图例启用点击
         lined = {}
