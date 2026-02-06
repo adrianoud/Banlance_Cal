@@ -4599,10 +4599,10 @@ class EnergyBalanceApp:
         
     def export_optimization_results(self):
         """
-        导出优化结果
+        导出优化结果，包含优化前后的详细对比数据和汇总信息
         """
-        if not hasattr(self, 'optimized_results'):
-            messagebox.showwarning("警告", "优化结果为空，无法导出！")
+        if not hasattr(self, 'optimized_results') or not self.results:
+            messagebox.showwarning("警告", "优化结果或平衡计算结果为空，无法导出！")
             return
         
         # 询问用户保存位置
@@ -4622,44 +4622,198 @@ class EnergyBalanceApp:
                 base_date = datetime(2025, 1, 1)
                 time_stamps = [(base_date + timedelta(hours=i)).strftime("%Y-%m-%d %H:%M") for i in range(8760)]
                 
-                # 创建DataFrame
-                df = pd.DataFrame({
+                # 计算优化前的各项数据
+                original_basic_load = self.results['hourly_corrected_electric_load']  # 修正后电力负荷
+                original_internal_load = self.results['hourly_internal_electric_load']  # 厂用电负荷
+                original_flexible_load = [0.0] * 8760  # 优化前没有灵活负荷概念
+                original_total_load = self.results['hourly_total_load']  # 总负荷
+                original_peak_output = self.results['hourly_peak_output']  # 调峰机组出力
+                original_wind_pv_actual = self.results['hourly_wind_pv_actual']  # 光伏风机实际出力
+                original_grid_load = self.results['hourly_grid_load']  # 下网负荷
+                original_abandon_rate = self.results['hourly_abandon_rate']  # 弃风光率
+                
+                # 计算优化前的收益
+                original_revenue = []
+                grid_price = self.data_model.grid_purchase_price_hourly
+                basic_load_revenue = self.basic_load_revenue.get()
+                flexible_load_revenue = self.flexible_load_revenue.get()
+                thermal_cost = self.thermal_cost.get()
+                pv_cost = self.pv_cost.get()
+                wind_cost = self.wind_cost.get()
+                
+                for i in range(8760):
+                    chp_output = self.results['hourly_chp_output'][i]
+                    pv_output = self.results['hourly_pv_output'][i]
+                    wind_output = self.results['hourly_wind_output'][i]
+                    thermal_output = chp_output + original_peak_output[i]
+                    
+                    revenue = (
+                        original_basic_load[i] * basic_load_revenue + 
+                        original_flexible_load[i] * flexible_load_revenue - 
+                        thermal_output * thermal_cost - 
+                        pv_output * pv_cost - 
+                        wind_output * wind_cost
+                    )
+                    
+                    if original_grid_load[i] > 0:
+                        revenue -= original_grid_load[i] * grid_price[i] if i < len(grid_price) else 0
+                    
+                    original_revenue.append(revenue)
+                
+                # 计算优化后的各项数据
+                optimized_basic_load = self.optimized_results['hourly_basic_load']
+                optimized_flexible_load = self.optimized_results['hourly_flexible_load']
+                optimized_revenue = self.optimized_results['hourly_revenue']
+                
+                # 计算优化后的其他数据
+                optimized_internal_load = []
+                optimized_total_load = []
+                optimized_peak_output = []
+                optimized_wind_pv_actual = []
+                optimized_grid_load = []
+                optimized_abandon_rate = []
+                
+                for i in range(8760):
+                    # 计算优化后的厂用电负荷（基于优化后的火电出力）
+                    chp_output = self.results['hourly_chp_output'][i]
+                    pv_output = self.results['hourly_pv_output'][i]
+                    wind_output = self.results['hourly_wind_output'][i]
+                    
+                    # 获取当前小时的修正后调峰机组参数
+                    calc_base_date = datetime(2024, 1, 1)
+                    current_date = calc_base_date + timedelta(hours=i)
+                    current_month = current_date.month
+                    
+                    current_peak_power_max = self.data_model.peak_power_max
+                    if 5 <= current_month <= 9:  # 夏季
+                        current_peak_power_min = self.data_model.peak_power_min_summer
+                    else:  # 冬季
+                        current_peak_power_min = self.data_model.peak_power_min_winter
+                    
+                    # 计算优化后的调峰机组出力
+                    total_load = optimized_basic_load[i] + optimized_flexible_load[i]
+                    peak_pending = total_load - chp_output - pv_output - wind_output
+                    peak_output = max(min(peak_pending, current_peak_power_max), current_peak_power_min)
+                    thermal_output = chp_output + peak_output
+                    
+                    # 计算厂用电负荷
+                    internal_load = thermal_output * self.data_model.internal_electric_rate
+                    generation = pv_output + wind_output + thermal_output
+                    grid_load = total_load - generation
+                    
+                    # 弃风光率保持不变（由风光出力和弃风弃光电量决定）
+                    abandon_rate = self.results['hourly_abandon_rate'][i]
+                    wind_pv_actual = self.results['hourly_wind_pv_actual'][i]
+                    
+                    optimized_internal_load.append(internal_load)
+                    optimized_total_load.append(total_load)
+                    optimized_peak_output.append(peak_output)
+                    optimized_wind_pv_actual.append(wind_pv_actual)
+                    optimized_grid_load.append(grid_load)
+                    optimized_abandon_rate.append(abandon_rate)
+                
+                # 计算收益差
+                revenue_difference = [optimized_revenue[i] - original_revenue[i] for i in range(8760)]
+                
+                # 创建详细对比DataFrame
+                df_detailed = pd.DataFrame({
                     '时间': time_stamps,
-                    '基础负荷优化值(kW)': self.optimized_results['hourly_basic_load'],
-                    '灵活负荷优化值(kW)': self.optimized_results['hourly_flexible_load'],
-                    '每小时收益(元)': self.optimized_results['hourly_revenue']
+                    # 优化前数据
+                    '优化前修正后电力负荷(kW)': original_basic_load,
+                    '优化前厂用电负荷(kW)': original_internal_load,
+                    '优化前灵活负荷(kW)': original_flexible_load,
+                    '优化前总负荷(kW)': original_total_load,
+                    '优化前调峰机组出力(kW)': original_peak_output,
+                    '优化前光伏风机实际出力(kW)': original_wind_pv_actual,
+                    '优化前下网负荷(kW)': original_grid_load,
+                    '优化前弃风光率(%)': [rate * 100 for rate in original_abandon_rate],
+                    '优化前收益(元)': original_revenue,
+                    # 优化后数据
+                    '优化后电力负荷(kW)': optimized_basic_load,
+                    '优化后厂用电负荷(kW)': optimized_internal_load,
+                    '优化后灵活负荷(kW)': optimized_flexible_load,
+                    '优化后总负荷(kW)': optimized_total_load,
+                    '优化后调峰机组出力(kW)': optimized_peak_output,
+                    '优化后光伏风机实际出力(kW)': optimized_wind_pv_actual,
+                    '优化后下网负荷(kW)': optimized_grid_load,
+                    '优化后弃风光率(%)': [rate * 100 for rate in optimized_abandon_rate],
+                    '优化后收益(元)': optimized_revenue,
+                    # 差异数据
+                    '收益差(元)': revenue_difference
                 })
+                
+                # 按月度汇总
+                monthly_summary = []
+                for month in range(1, 13):
+                    # 计算该月的小时范围
+                    if month == 1:
+                        start_hour = 0
+                        end_hour = 744  # 31天
+                    elif month in [3, 5, 7, 8, 10, 12]:
+                        start_hour = sum([31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30][:month-1]) * 24
+                        end_hour = start_hour + 31 * 24
+                    elif month in [4, 6, 9, 11]:
+                        start_hour = sum([31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30][:month-1]) * 24
+                        end_hour = start_hour + 30 * 24
+                    else:  # 2月
+                        start_hour = 31 * 24
+                        end_hour = start_hour + 28 * 24
+                    
+                    # 确保不超出范围
+                    start_hour = max(0, min(start_hour, 8759))
+                    end_hour = max(0, min(end_hour, 8760))
+                    
+                    if start_hour < end_hour:
+                        month_hours = list(range(start_hour, end_hour))
+                        
+                        # 计算月度汇总数据
+                        original_month_revenue = sum(original_revenue[i] for i in month_hours)
+                        optimized_month_revenue = sum(optimized_revenue[i] for i in month_hours)
+                        month_revenue_diff = optimized_month_revenue - original_month_revenue
+                        
+                        monthly_summary.append([
+                            f'{month}月',
+                            f'{original_month_revenue:.2f}',
+                            f'{optimized_month_revenue:.2f}',
+                            f'{month_revenue_diff:.2f}'
+                        ])
+                
+                # 年度汇总
+                annual_original_revenue = sum(original_revenue)
+                annual_optimized_revenue = sum(optimized_revenue)
+                annual_revenue_diff = annual_optimized_revenue - annual_original_revenue
+                
+                monthly_summary.append([
+                    '年度总计',
+                    f'{annual_original_revenue:.2f}',
+                    f'{annual_optimized_revenue:.2f}',
+                    f'{annual_revenue_diff:.2f}'
+                ])
+                
+                # 创建汇总DataFrame
+                summary_df = pd.DataFrame(monthly_summary, columns=['月份', '优化前收益(元)', '优化后收益(元)', '收益差(元)'])
                 
                 # 导出到Excel
                 with pd.ExcelWriter(save_path, engine='openpyxl') as writer:
-                    df.to_excel(writer, sheet_name='优化结果', index=False)
+                    # 详细对比数据
+                    df_detailed.to_excel(writer, sheet_name='每小时优化结果', index=False)
                     
-                    # 添加汇总信息工作表
-                    summary_data = [
-                        ['项目', '值'],
-                        ['总收益(元)', f'{self.optimized_results["total_revenue"]:.2f}'],
-                        ['平均每小时收益(元)', f'{self.optimized_results["total_revenue"] / 8760:.2f}'],
-                        ['基础负荷平均值(kW)', f'{sum(self.optimized_results["hourly_basic_load"]) / 8760:.2f}'],
-                        ['灵活负荷平均值(kW)', f'{sum(self.optimized_results["hourly_flexible_load"]) / 8760:.2f}'],
-                        ['基础负荷总计(kWh)', f'{sum(self.optimized_results["hourly_basic_load"]):.2f}'],
-                        ['灵活负荷总计(kWh)', f'{sum(self.optimized_results["hourly_flexible_load"]):.2f}']
-                    ]
-                    
-                    summary_df = pd.DataFrame(summary_data)
-                    summary_df.to_excel(writer, sheet_name='汇总信息', index=False, header=False)
+                    # 汇总信息
+                    summary_df.to_excel(writer, sheet_name='收益汇总', index=False)
                 
-                messagebox.showinfo("成功", f"优化结果已导出至:\n{save_path}")
+                messagebox.showinfo("成功", f"优化结果已导出至:\n{save_path}\n包含每小时详细对比和月度/年度汇总数据")
             except ImportError:
                 # 如果pandas不可用，使用文本格式导出
                 txt_save_path = save_path.replace('.xlsx', '.txt')
                 with open(txt_save_path, 'w', encoding='utf-8') as f:
-                    f.write("优化结果\n\n")
-                    f.write(f"总收益: {self.optimized_results['total_revenue']:.2f} 元\n")
-                    f.write(f"平均每小时收益: {self.optimized_results['total_revenue']/8760:.2f} 元\n\n")
-                    f.write("每小时优化结果 (前10小时示例):\n")
-                    f.write("小时,基础负荷优化值(kW),灵活负荷优化值(kW),每小时收益(元)\n")
+                    f.write("优化结果对比\n\n")
+                    f.write(f"总收益(优化前): {sum(original_revenue):.2f} 元\n")
+                    f.write(f"总收益(优化后): {self.optimized_results['total_revenue']:.2f} 元\n")
+                    f.write(f"收益改善: {self.optimized_results['total_revenue'] - sum(original_revenue):.2f} 元\n\n")
+                    f.write("每小时优化结果对比 (前10小时示例):\n")
+                    f.write("小时,优化前负荷(kW),优化后负荷(kW),优化前收益(元),优化后收益(元),收益差(元)\n")
                     for i in range(min(10, 8760)):
-                        f.write(f"{i},{self.optimized_results['hourly_basic_load'][i]:.2f},{self.optimized_results['hourly_flexible_load'][i]:.2f},{self.optimized_results['hourly_revenue'][i]:.2f}\n")
+                        f.write(f"{i},{original_basic_load[i]:.2f},{optimized_basic_load[i]:.2f},{original_revenue[i]:.2f},{optimized_revenue[i]:.2f},{optimized_revenue[i]-original_revenue[i]:.2f}\n")
                 messagebox.showinfo("成功", f"优化结果已导出至:\n{txt_save_path} (由于缺少pandas库，以文本格式导出)")
             except Exception as e:
                 messagebox.showerror("错误", f"导出优化结果失败:\n{str(e)}")
