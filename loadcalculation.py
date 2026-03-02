@@ -5014,6 +5014,9 @@ class EnergyBalanceApp:
                 solar_irradiance = self.data_model.solar_irradiance_hourly[i]
                 wind_speed = self.data_model.wind_speed_hourly[i]
                 
+                # 获取计算器实例
+                calculator = self.calculator
+                
                 # 重新计算光伏出力（考虑出力限制计划）
                 pv_output = 0.0
                 for model in self.data_model.pv_models:
@@ -5052,7 +5055,6 @@ class EnergyBalanceApp:
                     current_peak_power_min = self.data_model.peak_power_min_winter
                 
                 # 获取当前小时的活动检修计划和投产计划
-                calculator = self.calculator
                 active_maintenance_schedules = calculator.get_active_maintenance_schedules(i)
                 active_commissioning_schedules = calculator.get_active_commissioning_schedules(i)
                 
