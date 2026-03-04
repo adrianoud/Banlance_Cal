@@ -218,6 +218,26 @@ class EnergyDataModel:
             'min_grid_load': 0.0            # 最小下网负荷 (kW)
         }
         
+        # 成本优化曲线参数（新增）
+        self.thermal_cost_curve = {
+            'quadratic_coefficient': 0.0,    # 二次项系数
+            'linear_coefficient': -0.4,       # 一次项系数
+            'constant_term': 1.4,             # 常数项
+            'base_cost': 0.2                  # 基准成本 (元/kWh)
+        }
+        
+        self.wind_cost_curve = {
+            'linear_coefficient': 0.0,        # 一次项系数
+            'constant_term': 1.0,             # 常数项
+            'base_cost': 0.05                 # 基准成本 (元/kWh)
+        }
+        
+        self.pv_cost_curve = {
+            'linear_coefficient': 0.0,        # 一次项系数
+            'constant_term': 1.0,             # 常数项
+            'base_cost': 0.05                 # 基准成本 (元/kWh)
+        }
+        
     def calculate_wind_total_capacity(self):
         """
         计算风机总装机容量
@@ -285,6 +305,9 @@ class EnergyDataModel:
             'commissioning_schedules': self.commissioning_schedules,
             'output_limit_schedules': self.output_limit_schedules,
             'optimization_params': self.optimization_params,
+            'thermal_cost_curve': self.thermal_cost_curve,  # 新增
+            'wind_cost_curve': self.wind_cost_curve,        # 新增
+            'pv_cost_curve': self.pv_cost_curve,            # 新增
             'optimized_results': getattr(self, 'optimized_results', None)
         }
         return data
@@ -357,6 +380,26 @@ class EnergyDataModel:
             'wind_cost': 0.05,
             'load_change_rate_limit': 100000.0,
             'min_grid_load': 0.0
+        })
+        
+        # 加载成本优化曲线参数（新增）
+        self.thermal_cost_curve = data.get('thermal_cost_curve', {
+            'quadratic_coefficient': 0.0,
+            'linear_coefficient': -0.4,
+            'constant_term': 1.4,
+            'base_cost': 0.2
+        })
+        
+        self.wind_cost_curve = data.get('wind_cost_curve', {
+            'linear_coefficient': 0.0,
+            'constant_term': 1.0,
+            'base_cost': 0.05
+        })
+        
+        self.pv_cost_curve = data.get('pv_cost_curve', {
+            'linear_coefficient': 0.0,
+            'constant_term': 1.0,
+            'base_cost': 0.05
         })
         
         # 加载优化结果（如果有）
@@ -1409,6 +1452,9 @@ class EnergyBalanceApp:
                 
         # 优化标签页
         self.create_optimization_tab(notebook)
+        
+        # 成本优化标签页（新增）
+        self.create_cost_optimization_tab(notebook)
         
         # 配置网格权重
         self.root.columnconfigure(0, weight=1)
@@ -4294,6 +4340,292 @@ class EnergyBalanceApp:
         
         # 配置权重
         tab.rowconfigure(4, weight=1)
+
+    def create_cost_optimization_tab(self, notebook):
+        """
+        创建成本优化标签页（新增）
+        """
+        tab = ttk.Frame(notebook, padding="10")
+        notebook.add(tab, text="💰 成本优化")  # 添加成本优化图标
+        
+        # 添加返回项目列表按钮
+        back_btn = ttk.Button(tab, text="保存并返回项目列表", command=self.save_and_return_to_project_list)
+        back_btn.grid(row=0, column=0, sticky=tk.E, padx=5, pady=5)
+        
+        # 成本曲线参数设置区域
+        params_frame = ttk.LabelFrame(tab, text="成本曲线参数设置", padding="10")
+        params_frame.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=5)
+        
+        # === 火力发电成本曲线 ===
+        thermal_frame = ttk.LabelFrame(params_frame, text="火力发电成本曲线（二次函数）", padding="10")
+        thermal_frame.grid(row=0, column=0, sticky=(tk.W, tk.E), padx=5, pady=5)
+        
+        # 二次项系数
+        ttk.Label(thermal_frame, text="二次项系数 (a):").grid(row=0, column=0, sticky=tk.W, pady=5)
+        self.thermal_quadratic_coef = tk.DoubleVar(value=self.data_model.thermal_cost_curve['quadratic_coefficient'])
+        ttk.Entry(thermal_frame, textvariable=self.thermal_quadratic_coef, width=15).grid(row=0, column=1, padx=5, pady=5)
+        
+        # 一次项系数
+        ttk.Label(thermal_frame, text="一次项系数 (b):").grid(row=0, column=2, sticky=tk.W, pady=5)
+        self.thermal_linear_coef = tk.DoubleVar(value=self.data_model.thermal_cost_curve['linear_coefficient'])
+        ttk.Entry(thermal_frame, textvariable=self.thermal_linear_coef, width=15).grid(row=0, column=3, padx=5, pady=5)
+        
+        # 常数项
+        ttk.Label(thermal_frame, text="常数项 (c):").grid(row=0, column=4, sticky=tk.W, pady=5)
+        self.thermal_constant = tk.DoubleVar(value=self.data_model.thermal_cost_curve['constant_term'])
+        ttk.Entry(thermal_frame, textvariable=self.thermal_constant, width=15).grid(row=0, column=5, padx=5, pady=5)
+        
+        # 基准成本
+        ttk.Label(thermal_frame, text="基准成本 (元/kWh):").grid(row=1, column=0, sticky=tk.W, pady=5)
+        self.thermal_base_cost = tk.DoubleVar(value=self.data_model.thermal_cost_curve['base_cost'])
+        ttk.Entry(thermal_frame, textvariable=self.thermal_base_cost, width=15).grid(row=1, column=1, padx=5, pady=5)
+        
+        # 火电最大出力显示
+        ttk.Label(thermal_frame, text="火电最大出力 (kW):").grid(row=1, column=2, sticky=tk.W, pady=5)
+        self.thermal_max_output_label = ttk.Label(thermal_frame, text="0.0", foreground="blue")
+        self.thermal_max_output_label.grid(row=1, column=3, padx=5, pady=5, sticky=tk.W)
+        
+        # 当前出力和真实成本显示
+        ttk.Label(thermal_frame, text="当前出力/成本:").grid(row=1, column=4, sticky=tk.W, pady=5)
+        self.thermal_current_display = ttk.Label(thermal_frame, text="- kW / - 元", foreground="green")
+        self.thermal_current_display.grid(row=1, column=5, padx=5, pady=5, sticky=tk.W)
+        
+        # === 风机发电成本曲线 ===
+        wind_frame = ttk.LabelFrame(params_frame, text="风机发电成本曲线（一次函数）", padding="10")
+        wind_frame.grid(row=1, column=0, sticky=(tk.W, tk.E), padx=5, pady=5)
+        
+        # 一次项系数
+        ttk.Label(wind_frame, text="一次项系数 (k):").grid(row=0, column=0, sticky=tk.W, pady=5)
+        self.wind_linear_coef = tk.DoubleVar(value=self.data_model.wind_cost_curve['linear_coefficient'])
+        ttk.Entry(wind_frame, textvariable=self.wind_linear_coef, width=15).grid(row=0, column=1, padx=5, pady=5)
+        
+        # 常数项
+        ttk.Label(wind_frame, text="常数项 (b):").grid(row=0, column=2, sticky=tk.W, pady=5)
+        self.wind_constant = tk.DoubleVar(value=self.data_model.wind_cost_curve['constant_term'])
+        ttk.Entry(wind_frame, textvariable=self.wind_constant, width=15).grid(row=0, column=3, padx=5, pady=5)
+        
+        # 基准成本
+        ttk.Label(wind_frame, text="基准成本 (元/kWh):").grid(row=0, column=4, sticky=tk.W, pady=5)
+        self.wind_base_cost = tk.DoubleVar(value=self.data_model.wind_cost_curve['base_cost'])
+        ttk.Entry(wind_frame, textvariable=self.wind_base_cost, width=15).grid(row=0, column=5, padx=5, pady=5)
+        
+        # 风机装机容量显示
+        ttk.Label(wind_frame, text="风机装机容量 (kW):").grid(row=1, column=0, sticky=tk.W, pady=5)
+        self.wind_capacity_label = ttk.Label(wind_frame, text="0.0", foreground="blue")
+        self.wind_capacity_label.grid(row=1, column=1, padx=5, pady=5, sticky=tk.W)
+        
+        # 当前出力和真实成本显示
+        ttk.Label(wind_frame, text="当前出力/成本:").grid(row=1, column=2, sticky=tk.W, pady=5)
+        self.wind_current_display = ttk.Label(wind_frame, text="- kW / - 元", foreground="green")
+        self.wind_current_display.grid(row=1, column=3, padx=5, pady=5, sticky=tk.W)
+        
+        # === 光伏发电成本曲线 ===
+        pv_frame = ttk.LabelFrame(params_frame, text="光伏发电成本曲线（一次函数）", padding="10")
+        pv_frame.grid(row=2, column=0, sticky=(tk.W, tk.E), padx=5, pady=5)
+        
+        # 一次项系数
+        ttk.Label(pv_frame, text="一次项系数 (k):").grid(row=0, column=0, sticky=tk.W, pady=5)
+        self.pv_linear_coef = tk.DoubleVar(value=self.data_model.pv_cost_curve['linear_coefficient'])
+        ttk.Entry(pv_frame, textvariable=self.pv_linear_coef, width=15).grid(row=0, column=1, padx=5, pady=5)
+        
+        # 常数项
+        ttk.Label(pv_frame, text="常数项 (b):").grid(row=0, column=2, sticky=tk.W, pady=5)
+        self.pv_constant = tk.DoubleVar(value=self.data_model.pv_cost_curve['constant_term'])
+        ttk.Entry(pv_frame, textvariable=self.pv_constant, width=15).grid(row=0, column=3, padx=5, pady=5)
+        
+        # 基准成本
+        ttk.Label(pv_frame, text="基准成本 (元/kWh):").grid(row=0, column=4, sticky=tk.W, pady=5)
+        self.pv_base_cost = tk.DoubleVar(value=self.data_model.pv_cost_curve['base_cost'])
+        ttk.Entry(pv_frame, textvariable=self.pv_base_cost, width=15).grid(row=0, column=5, padx=5, pady=5)
+        
+        # 光伏装机容量显示
+        ttk.Label(pv_frame, text="光伏装机容量 (kW):").grid(row=1, column=0, sticky=tk.W, pady=5)
+        self.pv_capacity_label = ttk.Label(pv_frame, text="0.0", foreground="blue")
+        self.pv_capacity_label.grid(row=1, column=1, padx=5, pady=5, sticky=tk.W)
+        
+        # 当前出力和真实成本显示
+        ttk.Label(pv_frame, text="当前出力/成本:").grid(row=1, column=2, sticky=tk.W, pady=5)
+        self.pv_current_display = ttk.Label(pv_frame, text="- kW / - 元", foreground="green")
+        self.pv_current_display.grid(row=1, column=3, padx=5, pady=5, sticky=tk.W)
+        
+        # 配置权重
+        params_frame.columnconfigure(0, weight=1)
+        thermal_frame.columnconfigure(1, weight=1)
+        thermal_frame.columnconfigure(3, weight=1)
+        thermal_frame.columnconfigure(5, weight=1)
+        wind_frame.columnconfigure(1, weight=1)
+        wind_frame.columnconfigure(3, weight=1)
+        wind_frame.columnconfigure(5, weight=1)
+        pv_frame.columnconfigure(1, weight=1)
+        pv_frame.columnconfigure(3, weight=1)
+        pv_frame.columnconfigure(5, weight=1)
+        
+        # 控制按钮
+        control_frame = ttk.Frame(tab)
+        control_frame.grid(row=2, column=0, sticky=(tk.W, tk.E), pady=5)
+        
+        # 保存成本参数按钮
+        ttk.Button(control_frame, text="保存成本参数", command=self.save_cost_parameters).grid(row=0, column=0, padx=5, pady=10)
+        
+        # 刷新数据按钮
+        ttk.Button(control_frame, text="刷新数据", command=self.refresh_cost_data).grid(row=0, column=1, padx=5, pady=10)
+        
+        # 成本曲线可视化区域
+        plot_frame = ttk.LabelFrame(tab, text="成本曲线可视化", padding="10")
+        plot_frame.grid(row=3, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=5)
+        
+        # 创建 matplotlib 图形
+        self.cost_figure = Figure(figsize=(10, 6), dpi=100)
+        self.cost_ax = self.cost_figure.add_subplot(111)
+        self.cost_canvas = FigureCanvasTkAgg(self.cost_figure, plot_frame)
+        self.cost_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True, pady=5)
+        
+        # 配置权重
+        tab.columnconfigure(0, weight=1)
+        tab.rowconfigure(3, weight=1)
+        
+        # 初始化成本曲线显示
+        self.initialize_cost_curves()
+    
+    def initialize_cost_curves(self):
+        """
+        初始化成本曲线图表
+        """
+        self.cost_ax.clear()
+        self.cost_ax.text(0.5, 0.5, '暂无成本曲线数据\n请先进行平衡计算，然后点击刷新数据', 
+                         horizontalalignment='center', verticalalignment='center',
+                         transform=self.cost_ax.transAxes, fontsize=12)
+        self.cost_ax.set_title('成本曲线')
+        self.cost_canvas.draw()
+    
+    def save_cost_parameters(self):
+        """
+        保存成本曲线参数到数据模型
+        """
+        try:
+            # 保存火力发电成本曲线参数
+            self.data_model.thermal_cost_curve['quadratic_coefficient'] = self.thermal_quadratic_coef.get()
+            self.data_model.thermal_cost_curve['linear_coefficient'] = self.thermal_linear_coef.get()
+            self.data_model.thermal_cost_curve['constant_term'] = self.thermal_constant.get()
+            self.data_model.thermal_cost_curve['base_cost'] = self.thermal_base_cost.get()
+            
+            # 保存风机发电成本曲线参数
+            self.data_model.wind_cost_curve['linear_coefficient'] = self.wind_linear_coef.get()
+            self.data_model.wind_cost_curve['constant_term'] = self.wind_constant.get()
+            self.data_model.wind_cost_curve['base_cost'] = self.wind_base_cost.get()
+            
+            # 保存光伏发电成本曲线参数
+            self.data_model.pv_cost_curve['linear_coefficient'] = self.pv_linear_coef.get()
+            self.data_model.pv_cost_curve['constant_term'] = self.pv_constant.get()
+            self.data_model.pv_cost_curve['base_cost'] = self.pv_base_cost.get()
+            
+            # 保存项目数据
+            self.save_current_project()
+            
+            messagebox.showinfo("成功", "成本参数已保存！")
+            
+        except Exception as e:
+            messagebox.showerror("错误", f"保存成本参数失败：{str(e)}")
+    
+    def refresh_cost_data(self):
+        """
+        刷新成本数据和曲线显示
+        """
+        try:
+            # 检查是否有计算结果
+            if not self.results:
+                messagebox.showwarning("警告", "请先进行年度平衡计算！")
+                return
+            
+            # 更新装机容量显示
+            total_wind_capacity = self.data_model.calculate_wind_total_capacity()
+            total_pv_capacity = self.data_model.calculate_pv_total_capacity()
+            
+            self.wind_capacity_label.config(text=f"{total_wind_capacity:.2f}")
+            self.pv_capacity_label.config(text=f"{total_pv_capacity:.2f}")
+            
+            # 获取火电最大出力（调峰机组最大出力 + 热定电基础出力）
+            thermal_max_output = self.data_model.peak_power_max + self.data_model.chp_electric_params['base_electric']
+            self.thermal_max_output_label.config(text=f"{thermal_max_output:.2f}")
+            
+            # 使用年度平均值计算当前出力和成本
+            avg_thermal_output = np.mean(self.results['hourly_thermal_output'])
+            avg_wind_output = np.mean(self.results['hourly_wind_output'])
+            avg_pv_output = np.mean(self.results['hourly_pv_output'])
+            
+            # 计算各电源的真实成本
+            thermal_relative_output = avg_thermal_output / thermal_max_output if thermal_max_output > 0 else 0
+            thermal_relative_cost = (self.data_model.thermal_cost_curve['quadratic_coefficient'] * thermal_relative_output**2 +
+                                   self.data_model.thermal_cost_curve['linear_coefficient'] * thermal_relative_output +
+                                   self.data_model.thermal_cost_curve['constant_term'])
+            thermal_real_cost = thermal_relative_cost * self.data_model.thermal_cost_curve['base_cost']
+            
+            wind_relative_output = avg_wind_output / total_wind_capacity if total_wind_capacity > 0 else 0
+            wind_relative_cost = (self.data_model.wind_cost_curve['linear_coefficient'] * wind_relative_output +
+                                self.data_model.wind_cost_curve['constant_term'])
+            wind_real_cost = wind_relative_cost * self.data_model.wind_cost_curve['base_cost']
+            
+            pv_relative_output = avg_pv_output / total_pv_capacity if total_pv_capacity > 0 else 0
+            pv_relative_cost = (self.data_model.pv_cost_curve['linear_coefficient'] * pv_relative_output +
+                              self.data_model.pv_cost_curve['constant_term'])
+            pv_real_cost = pv_relative_cost * self.data_model.pv_cost_curve['base_cost']
+            
+            # 更新显示
+            self.thermal_current_display.config(text=f"{avg_thermal_output:.1f} kW / {thermal_real_cost:.3f} 元")
+            self.wind_current_display.config(text=f"{avg_wind_output:.1f} kW / {wind_real_cost:.3f} 元")
+            self.pv_current_display.config(text=f"{avg_pv_output:.1f} kW / {pv_real_cost:.3f} 元")
+            
+            # 绘制成本曲线
+            self.plot_cost_curves()
+            
+        except Exception as e:
+            messagebox.showerror("错误", f"刷新成本数据失败：{str(e)}")
+    
+    def plot_cost_curves(self):
+        """
+        绘制成本曲线图
+        """
+        self.cost_ax.clear()
+        
+        # 生成相对出力数据 (0-1)
+        relative_output = np.linspace(0, 1, 100)
+        
+        # 火力发电成本曲线（二次函数）
+        thermal_relative_cost = (self.data_model.thermal_cost_curve['quadratic_coefficient'] * relative_output**2 +
+                               self.data_model.thermal_cost_curve['linear_coefficient'] * relative_output +
+                               self.data_model.thermal_cost_curve['constant_term'])
+        thermal_real_cost = thermal_relative_cost * self.data_model.thermal_cost_curve['base_cost']
+        
+        # 风机发电成本曲线（一次函数）
+        wind_relative_cost = (self.data_model.wind_cost_curve['linear_coefficient'] * relative_output +
+                            self.data_model.wind_cost_curve['constant_term'])
+        wind_real_cost = wind_relative_cost * self.data_model.wind_cost_curve['base_cost']
+        
+        # 光伏发电成本曲线（一次函数）
+        pv_relative_cost = (self.data_model.pv_cost_curve['linear_coefficient'] * relative_output +
+                          self.data_model.pv_cost_curve['constant_term'])
+        pv_real_cost = pv_relative_cost * self.data_model.pv_cost_curve['base_cost']
+        
+        # 绘制曲线
+        self.cost_ax.plot(relative_output, thermal_real_cost, label='火力发电', linewidth=2, color='red')
+        self.cost_ax.plot(relative_output, wind_real_cost, label='风力发电', linewidth=2, color='blue', linestyle='--')
+        self.cost_ax.plot(relative_output, pv_real_cost, label='光伏发电', linewidth=2, color='green', linestyle=':')
+        
+        # 设置标签和标题
+        self.cost_ax.set_xlabel('相对出力', fontsize=12)
+        self.cost_ax.set_ylabel('真实成本 (元/kWh)', fontsize=12)
+        self.cost_ax.set_title('发电成本曲线对比', fontsize=14)
+        self.cost_ax.legend(loc='best')
+        self.cost_ax.grid(True, alpha=0.3)
+        
+        # 设置 x 轴范围
+        self.cost_ax.set_xlim(0, 1)
+        
+        # 调整布局
+        self.cost_figure.tight_layout()
+        
+        # 刷新画布
+        self.cost_canvas.draw()
 
     def start_optimization(self):
         """
