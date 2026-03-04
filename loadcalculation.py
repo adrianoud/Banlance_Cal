@@ -1450,11 +1450,11 @@ class EnergyBalanceApp:
         # 计算与结果标签页
         self.create_calculation_tab(notebook)
                 
-        # 优化标签页
-        self.create_optimization_tab(notebook)
-        
         # 发电成本标签页（在优化分析之前）
         self.create_cost_optimization_tab(notebook)
+        
+        # 优化标签页
+        self.create_optimization_tab(notebook)
         
         # 配置网格权重
         self.root.columnconfigure(0, weight=1)
