@@ -4480,12 +4480,25 @@ class EnergyBalanceApp:
         self.cost_canvas = FigureCanvasTkAgg(self.cost_figure, plot_frame)
         self.cost_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True, pady=5)
         
+        # 8760 小时成本趋势图区域
+        hourly_cost_plot_frame = ttk.LabelFrame(tab, text="8760 小时成本与电价趋势", padding="10")
+        hourly_cost_plot_frame.grid(row=4, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=5)
+        
+        # 创建 matplotlib 图形
+        self.hourly_cost_figure = Figure(figsize=(14, 6), dpi=100)
+        self.hourly_cost_ax = self.hourly_cost_figure.add_subplot(111)
+        self.hourly_cost_canvas = FigureCanvasTkAgg(self.hourly_cost_figure, hourly_cost_plot_frame)
+        self.hourly_cost_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True, pady=5)
+        
         # 配置权重
         tab.columnconfigure(0, weight=1)
         tab.rowconfigure(3, weight=1)
+        tab.rowconfigure(4, weight=1)  # 8760 小时趋势图占据更多空间
         
         # 初始化成本曲线显示
         self.initialize_cost_curves()
+        # 初始化 8760 小时成本趋势图
+        self.initialize_hourly_cost_plot()
     
     def initialize_cost_curves(self):
         """
@@ -4497,6 +4510,17 @@ class EnergyBalanceApp:
                          transform=self.cost_ax.transAxes, fontsize=12)
         self.cost_ax.set_title('成本曲线')
         self.cost_canvas.draw()
+    
+    def initialize_hourly_cost_plot(self):
+        """
+        初始化 8760 小时成本与电价趋势图
+        """
+        self.hourly_cost_ax.clear()
+        self.hourly_cost_ax.text(0.5, 0.5, '暂无 8760 小时成本数据\n请先进行平衡计算，然后点击刷新数据', 
+                         horizontalalignment='center', verticalalignment='center',
+                         transform=self.hourly_cost_ax.transAxes, fontsize=12)
+        self.hourly_cost_ax.set_title('8760 小时成本与电价趋势')
+        self.hourly_cost_canvas.draw()
     
     def save_cost_parameters(self):
         """
@@ -4578,6 +4602,9 @@ class EnergyBalanceApp:
             # 绘制成本曲线
             self.plot_cost_curves()
             
+            # 绘制 8760 小时成本趋势图
+            self.plot_hourly_cost_trend()
+            
         except Exception as e:
             messagebox.showerror("错误", f"刷新成本数据失败：{str(e)}")
     
@@ -4626,6 +4653,75 @@ class EnergyBalanceApp:
         
         # 刷新画布
         self.cost_canvas.draw()
+    
+    def plot_hourly_cost_trend(self):
+        """
+        绘制 8760 小时成本与电价趋势图
+        显示每小时的火电、风电、光伏成本和下网电价
+        """
+        self.hourly_cost_ax.clear()
+        
+        # 检查是否有计算结果
+        if not self.results:
+            self.initialize_hourly_cost_plot()
+            return
+        
+        # 获取小时数据
+        hours = range(8760)
+        thermal_output = self.results['hourly_thermal_output']
+        wind_output = self.results['hourly_wind_output']
+        pv_output = self.results['hourly_pv_output']
+        grid_price = self.data_model.grid_purchase_price_hourly
+        
+        # 获取装机容量
+        total_wind_capacity = self.data_model.calculate_wind_total_capacity()
+        total_pv_capacity = self.data_model.calculate_pv_total_capacity()
+        thermal_max_output = self.data_model.peak_power_max + self.data_model.chp_electric_params['base_electric']
+        
+        # 计算每小时的相对出力和成本
+        thermal_costs = []
+        wind_costs = []
+        pv_costs = []
+        
+        for hour in hours:
+            # 火电成本
+            thermal_relative = thermal_output[hour] / thermal_max_output if thermal_max_output > 0 else 0
+            thermal_relative_cost = (self.data_model.thermal_cost_curve['quadratic_coefficient'] * thermal_relative**2 +
+                                   self.data_model.thermal_cost_curve['linear_coefficient'] * thermal_relative +
+                                   self.data_model.thermal_cost_curve['constant_term'])
+            thermal_costs.append(thermal_relative_cost * self.data_model.thermal_cost_curve['base_cost'])
+            
+            # 风电成本
+            wind_relative = wind_output[hour] / total_wind_capacity if total_wind_capacity > 0 else 0
+            wind_relative_cost = (self.data_model.wind_cost_curve['linear_coefficient'] * wind_relative +
+                                self.data_model.wind_cost_curve['constant_term'])
+            wind_costs.append(wind_relative_cost * self.data_model.wind_cost_curve['base_cost'])
+            
+            # 光电成本
+            pv_relative = pv_output[hour] / total_pv_capacity if total_pv_capacity > 0 else 0
+            pv_relative_cost = (self.data_model.pv_cost_curve['linear_coefficient'] * pv_relative +
+                              self.data_model.pv_cost_curve['constant_term'])
+            pv_costs.append(pv_relative_cost * self.data_model.pv_cost_curve['base_cost'])
+        
+        # 使用原始的小时数据进行绘图
+        # 采用较细的线条和透明度使图表清晰
+        self.hourly_cost_ax.plot(hours, thermal_costs, label='火电成本', linewidth=0.8, color='red', alpha=0.6)
+        self.hourly_cost_ax.plot(hours, wind_costs, label='风电成本', linewidth=0.8, color='blue', alpha=0.6, linestyle='--')
+        self.hourly_cost_ax.plot(hours, pv_costs, label='光电成本', linewidth=0.8, color='green', alpha=0.6, linestyle=':')
+        self.hourly_cost_ax.plot(hours, grid_price, label='下网电价', linewidth=1.0, color='orange', alpha=0.8, linestyle='-.')
+        
+        # 设置标签和标题
+        self.hourly_cost_ax.set_xlabel('小时', fontsize=12)
+        self.hourly_cost_ax.set_ylabel('成本/电价 (元/kWh)', fontsize=12)
+        self.hourly_cost_ax.set_title('8760 小时成本与电价趋势（逐小时数据）', fontsize=14)
+        self.hourly_cost_ax.legend(loc='best')
+        self.hourly_cost_ax.grid(True, alpha=0.3)
+        
+        # 调整布局
+        self.hourly_cost_figure.tight_layout()
+        
+        # 刷新画布
+        self.hourly_cost_canvas.draw()
 
     def start_optimization(self):
         """
