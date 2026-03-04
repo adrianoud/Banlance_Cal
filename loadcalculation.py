@@ -1453,7 +1453,7 @@ class EnergyBalanceApp:
         # 优化标签页
         self.create_optimization_tab(notebook)
         
-        # 成本优化标签页（新增）
+        # 发电成本标签页（在优化分析之前）
         self.create_cost_optimization_tab(notebook)
         
         # 配置网格权重
@@ -4343,18 +4343,22 @@ class EnergyBalanceApp:
 
     def create_cost_optimization_tab(self, notebook):
         """
-        创建成本优化标签页（新增）
+        创建发电成本标签页（新增）
         """
         tab = ttk.Frame(notebook, padding="10")
-        notebook.add(tab, text="💰 成本优化")  # 添加成本优化图标
+        notebook.add(tab, text="⚡ 发电成本")  # 添加发电成本图标
         
         # 添加返回项目列表按钮
         back_btn = ttk.Button(tab, text="保存并返回项目列表", command=self.save_and_return_to_project_list)
         back_btn.grid(row=0, column=0, sticky=tk.E, padx=5, pady=5)
         
-        # 成本曲线参数设置区域
-        params_frame = ttk.LabelFrame(tab, text="成本曲线参数设置", padding="10")
-        params_frame.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=5)
+        # 上半部分框架
+        top_frame = ttk.Frame(tab)
+        top_frame.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=5)
+        
+        # 左侧：成本曲线参数设置
+        params_frame = ttk.LabelFrame(top_frame, text="成本曲线参数设置", padding="10")
+        params_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(0, 5))
         
         # === 火力发电成本曲线 ===
         thermal_frame = ttk.LabelFrame(params_frame, text="火力发电成本曲线（二次函数）", padding="10")
@@ -4461,8 +4465,8 @@ class EnergyBalanceApp:
         pv_frame.columnconfigure(5, weight=1)
         
         # 控制按钮
-        control_frame = ttk.Frame(tab)
-        control_frame.grid(row=2, column=0, sticky=(tk.W, tk.E), pady=5)
+        control_frame = ttk.Frame(params_frame)
+        control_frame.grid(row=4, column=0, sticky=(tk.W, tk.E), pady=5)
         
         # 保存成本参数按钮
         ttk.Button(control_frame, text="保存成本参数", command=self.save_cost_parameters).grid(row=0, column=0, padx=5, pady=10)
@@ -4470,19 +4474,24 @@ class EnergyBalanceApp:
         # 刷新数据按钮
         ttk.Button(control_frame, text="刷新数据", command=self.refresh_cost_data).grid(row=0, column=1, padx=5, pady=10)
         
-        # 成本曲线可视化区域
-        plot_frame = ttk.LabelFrame(tab, text="成本曲线可视化", padding="10")
-        plot_frame.grid(row=3, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=5)
+        # 右侧：成本曲线可视化区域
+        plot_frame = ttk.LabelFrame(top_frame, text="发电成本曲线", padding="10")
+        plot_frame.grid(row=0, column=1, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(5, 0))
         
         # 创建 matplotlib 图形
-        self.cost_figure = Figure(figsize=(10, 6), dpi=100)
+        self.cost_figure = Figure(figsize=(8, 6), dpi=100)
         self.cost_ax = self.cost_figure.add_subplot(111)
         self.cost_canvas = FigureCanvasTkAgg(self.cost_figure, plot_frame)
         self.cost_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True, pady=5)
         
-        # 8760 小时成本趋势图区域
+        # 配置上半部分权重
+        top_frame.columnconfigure(0, weight=1)
+        top_frame.columnconfigure(1, weight=2)
+        top_frame.rowconfigure(0, weight=1)
+        
+        # 下半部分：8760 小时成本趋势图（占据整个宽度）
         hourly_cost_plot_frame = ttk.LabelFrame(tab, text="8760 小时成本与电价趋势", padding="10")
-        hourly_cost_plot_frame.grid(row=4, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=5)
+        hourly_cost_plot_frame.grid(row=2, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=5)
         
         # 创建 matplotlib 图形
         self.hourly_cost_figure = Figure(figsize=(14, 6), dpi=100)
@@ -4490,10 +4499,10 @@ class EnergyBalanceApp:
         self.hourly_cost_canvas = FigureCanvasTkAgg(self.hourly_cost_figure, hourly_cost_plot_frame)
         self.hourly_cost_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True, pady=5)
         
-        # 配置权重
+        # 配置整体权重
         tab.columnconfigure(0, weight=1)
-        tab.rowconfigure(3, weight=1)
-        tab.rowconfigure(4, weight=1)  # 8760 小时趋势图占据更多空间
+        tab.rowconfigure(1, weight=1)  # 上半部分
+        tab.rowconfigure(2, weight=2)  # 下半部分 8760 小时趋势图
         
         # 初始化成本曲线显示
         self.initialize_cost_curves()
