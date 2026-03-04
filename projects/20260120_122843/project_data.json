@@ -43895,15 +43895,15 @@
     "min_grid_load": 0.0
   },
   "thermal_cost_curve": {
-    "quadratic_coefficient": 0.0,
+    "quadratic_coefficient": 1.0,
     "linear_coefficient": -0.4,
     "constant_term": 1.4,
     "base_cost": 0.2
   },
   "wind_cost_curve": {
-    "linear_coefficient": 0.0,
+    "linear_coefficient": 1.0,
     "constant_term": 1.0,
-    "base_cost": 0.05
+    "base_cost": 0.2
   },
   "pv_cost_curve": {
     "linear_coefficient": 0.0,
