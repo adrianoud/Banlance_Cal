@@ -4229,15 +4229,27 @@ class EnergyBalanceApp:
         params_frame = ttk.LabelFrame(main_control_frame, text="优化参数设置", padding="10")
         params_frame.grid(row=0, column=0, sticky=(tk.W, tk.E), padx=(0, 5))
         
+        # 优化方式选择（新增）
+        ttk.Label(params_frame, text="优化方式:").grid(row=0, column=0, sticky=tk.W, pady=5)
+        self.optimization_mode_var = tk.StringVar(value="renewable_priority")  # 默认为新能源优先
+        optimization_mode_combo = ttk.Combobox(
+            params_frame, 
+            textvariable=self.optimization_mode_var,
+            values=["新能源优先的负荷优化", "成本优化", "整体优化"],
+            state="readonly",
+            width=17
+        )
+        optimization_mode_combo.grid(row=0, column=1, sticky=tk.W, padx=5)
+        
         # 基础负荷单位收益
-        ttk.Label(params_frame, text="基础负荷单位收益 (元/kWh): ").grid(row=0, column=0, sticky=tk.W, pady=5)
+        ttk.Label(params_frame, text="基础负荷单位收益 (元/kWh): ").grid(row=1, column=0, sticky=tk.W, pady=5)
         self.basic_load_revenue = tk.DoubleVar(value=self.data_model.optimization_params['basic_load_revenue'])  # 使用数据模型中的值
-        ttk.Entry(params_frame, textvariable=self.basic_load_revenue, width=20).grid(row=0, column=1, sticky=tk.W, padx=5)
+        ttk.Entry(params_frame, textvariable=self.basic_load_revenue, width=20).grid(row=1, column=1, sticky=tk.W, padx=5)
         
         # 灵活负荷单位收益
-        ttk.Label(params_frame, text="灵活负荷单位收益 (元/kWh): ").grid(row=1, column=0, sticky=tk.W, pady=5)
+        ttk.Label(params_frame, text="灵活负荷单位收益 (元/kWh): ").grid(row=2, column=0, sticky=tk.W, pady=5)
         self.flexible_load_revenue = tk.DoubleVar(value=self.data_model.optimization_params['flexible_load_revenue'])  # 使用数据模型中的值
-        ttk.Entry(params_frame, textvariable=self.flexible_load_revenue, width=20).grid(row=1, column=1, sticky=tk.W, padx=5)
+        ttk.Entry(params_frame, textvariable=self.flexible_load_revenue, width=20).grid(row=2, column=1, sticky=tk.W, padx=5)
         
         # 约束设置区域
         constraint_frame = ttk.LabelFrame(main_control_frame, text="约束设置", padding="10")
@@ -4716,6 +4728,10 @@ class EnergyBalanceApp:
     def start_optimization(self):
         """
         开始优化计算
+        支持三种优化方式：
+        1. 新能源优先的负荷优化（renewable_priority）- 保留现有逻辑
+        2. 成本优化（cost_optimization）- 最小化发电成本
+        3. 整体优化（overall_optimization）- 暂不实现
         """
         # 检查是否有计算结果可供优化
         if not self.results:
@@ -4724,12 +4740,17 @@ class EnergyBalanceApp:
         
         import numpy as np
         
+        # 获取选择的优化方式
+        optimization_mode = self.optimization_mode_var.get()
+        
+        # 检查是否选择了“整体优化”
+        if optimization_mode == "整体优化":
+            messagebox.showinfo("提示", "整体优化功能暂不实现，请选择其他优化方式。")
+            return
+        
         # 获取优化参数
         basic_load_revenue = self.basic_load_revenue.get()
         flexible_load_revenue = self.flexible_load_revenue.get()
-        
-        # 不再使用固定的单位成本，而是使用发电成本页中计算的每小时真实成本
-        # 这些成本会根据机组出力和成本曲线动态计算
         
         # 获取约束参数
         load_change_rate_limit = self.load_change_rate_limit.get()
