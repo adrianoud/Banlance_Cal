@@ -43908,7 +43908,7 @@
   "pv_cost_curve": {
     "linear_coefficient": 0.0,
     "constant_term": 1.0,
-    "base_cost": 0.05
+    "base_cost": 0.2
   },
   "optimized_results": {
     "hourly_basic_load": [
