@@ -211,9 +211,8 @@ class EnergyDataModel:
         self.optimization_params = {
             'basic_load_revenue': 1.0,      # 基础负荷单位收益 (元/kWh)
             'flexible_load_revenue': 0.8,   # 灵活负荷单位收益 (元/kWh)
-            'thermal_cost': 0.2,            # 火电发电单位成本 (元/kWh)
-            'pv_cost': 0.05,               # 光伏发电单位成本 (元/kWh)
-            'wind_cost': 0.05,              # 风机发电单位成本 (元/kWh)
+            # 注意：已删除 thermal_cost, pv_cost, wind_cost
+            # 现在优化计算使用发电成本页中基于成本曲线动态计算的真实成本
             'load_change_rate_limit': 100000.0,  # 负荷最大变动率 (kW/Hr)
             'min_grid_load': 0.0            # 最小下网负荷 (kW)
         }
@@ -375,9 +374,7 @@ class EnergyDataModel:
         self.optimization_params = data.get('optimization_params', {
             'basic_load_revenue': 1.0,
             'flexible_load_revenue': 0.8,
-            'thermal_cost': 0.2,
-            'pv_cost': 0.05,
-            'wind_cost': 0.05,
+            # 注意：已删除 thermal_cost, pv_cost, wind_cost
             'load_change_rate_limit': 100000.0,
             'min_grid_load': 0.0
         })
@@ -2761,9 +2758,8 @@ class EnergyBalanceApp:
             # 保存优化参数
             self.data_model.optimization_params['basic_load_revenue'] = self.basic_load_revenue.get()
             self.data_model.optimization_params['flexible_load_revenue'] = self.flexible_load_revenue.get()
-            self.data_model.optimization_params['thermal_cost'] = self.thermal_cost.get()
-            self.data_model.optimization_params['pv_cost'] = self.pv_cost.get()
-            self.data_model.optimization_params['wind_cost'] = self.wind_cost.get()
+            # 注意：已删除 thermal_cost, pv_cost, wind_cost
+            # 现在优化计算使用发电成本页中基于成本曲线动态计算的真实成本
             self.data_model.optimization_params['load_change_rate_limit'] = self.load_change_rate_limit.get()
             self.data_model.optimization_params['min_grid_load'] = self.min_grid_load.get()
             
@@ -4243,21 +4239,6 @@ class EnergyBalanceApp:
         self.flexible_load_revenue = tk.DoubleVar(value=self.data_model.optimization_params['flexible_load_revenue'])  # 使用数据模型中的值
         ttk.Entry(params_frame, textvariable=self.flexible_load_revenue, width=20).grid(row=1, column=1, sticky=tk.W, padx=5)
         
-        # 火电发电单位成本
-        ttk.Label(params_frame, text="火电发电单位成本 (元/kWh): ").grid(row=2, column=0, sticky=tk.W, pady=5)
-        self.thermal_cost = tk.DoubleVar(value=self.data_model.optimization_params['thermal_cost'])  # 使用数据模型中的值
-        ttk.Entry(params_frame, textvariable=self.thermal_cost, width=20).grid(row=2, column=1, sticky=tk.W, padx=5)
-        
-        # 光伏发电单位成本
-        ttk.Label(params_frame, text="光伏发电单位成本 (元/kWh): ").grid(row=3, column=0, sticky=tk.W, pady=5)
-        self.pv_cost = tk.DoubleVar(value=self.data_model.optimization_params['pv_cost'])  # 使用数据模型中的值
-        ttk.Entry(params_frame, textvariable=self.pv_cost, width=20).grid(row=3, column=1, sticky=tk.W, padx=5)
-        
-        # 风机发电单位成本
-        ttk.Label(params_frame, text="风机发电单位成本 (元/kWh): ").grid(row=4, column=0, sticky=tk.W, pady=5)
-        self.wind_cost = tk.DoubleVar(value=self.data_model.optimization_params['wind_cost'])  # 使用数据模型中的值
-        ttk.Entry(params_frame, textvariable=self.wind_cost, width=20).grid(row=4, column=1, sticky=tk.W, padx=5)
-        
         # 约束设置区域
         constraint_frame = ttk.LabelFrame(main_control_frame, text="约束设置", padding="10")
         constraint_frame.grid(row=0, column=1, sticky=(tk.W, tk.E), padx=(5, 0))
@@ -4736,13 +4717,6 @@ class EnergyBalanceApp:
         """
         开始优化计算
         """
-        # 获取当前设置的参数
-        basic_load_revenue = self.basic_load_revenue.get()
-        flexible_load_revenue = self.flexible_load_revenue.get()
-        thermal_cost = self.thermal_cost.get()
-        pv_cost = self.pv_cost.get()
-        wind_cost = self.wind_cost.get()
-        
         # 检查是否有计算结果可供优化
         if not self.results:
             messagebox.showwarning("警告", "请先进行年度平衡计算，再进行优化！")
@@ -4750,17 +4724,16 @@ class EnergyBalanceApp:
         
         import numpy as np
         
-        # 获取当前设置的参数
+        # 获取优化参数
         basic_load_revenue = self.basic_load_revenue.get()
         flexible_load_revenue = self.flexible_load_revenue.get()
-        thermal_cost = self.thermal_cost.get()
-        pv_cost = self.pv_cost.get()
-        wind_cost = self.wind_cost.get()
         
-        # 检查是否有计算结果可供优化
-        if not self.results:
-            messagebox.showwarning("警告", "请先进行年度平衡计算，再进行优化！")
-            return
+        # 不再使用固定的单位成本，而是使用发电成本页中计算的每小时真实成本
+        # 这些成本会根据机组出力和成本曲线动态计算
+        
+        # 获取约束参数
+        load_change_rate_limit = self.load_change_rate_limit.get()
+        min_grid_load = self.min_grid_load.get()
         
         # 获取电价数据，使用导入的下网电价
         grid_price = self.data_model.grid_purchase_price_hourly
@@ -4782,9 +4755,10 @@ class EnergyBalanceApp:
         from datetime import datetime, timedelta
         base_date = datetime(2024, 1, 1)
         
-        # 获取约束参数
-        load_change_rate_limit = self.load_change_rate_limit.get()
-        min_grid_load = self.min_grid_load.get()
+        # 预计算装机容量用于成本计算（在循环外计算一次）
+        total_wind_capacity = self.data_model.calculate_wind_total_capacity()
+        total_pv_capacity = self.data_model.calculate_pv_total_capacity()
+        thermal_max_output = self.data_model.peak_power_max + self.data_model.chp_electric_params['base_electric']
         
         # 逐小时优化
         for hour in range(8760):
@@ -4792,6 +4766,26 @@ class EnergyBalanceApp:
             chp_output = self.results['hourly_chp_output'][hour]
             pv_output = self.results['hourly_pv_output'][hour]
             wind_output = self.results['hourly_wind_output'][hour]
+            
+            # 计算当前小时的真实发电成本（使用发电成本页的成本曲线）
+            # 火电成本
+            thermal_relative = self.results['hourly_thermal_output'][hour] / thermal_max_output if thermal_max_output > 0 else 0
+            thermal_relative_cost = (self.data_model.thermal_cost_curve['quadratic_coefficient'] * thermal_relative**2 +
+                                   self.data_model.thermal_cost_curve['linear_coefficient'] * thermal_relative +
+                                   self.data_model.thermal_cost_curve['constant_term'])
+            current_thermal_cost = thermal_relative_cost * self.data_model.thermal_cost_curve['base_cost']
+            
+            # 风电成本
+            wind_relative = wind_output / total_wind_capacity if total_wind_capacity > 0 else 0
+            wind_relative_cost = (self.data_model.wind_cost_curve['linear_coefficient'] * wind_relative +
+                                self.data_model.wind_cost_curve['constant_term'])
+            current_wind_cost = wind_relative_cost * self.data_model.wind_cost_curve['base_cost']
+            
+            # 光电成本
+            pv_relative = pv_output / total_pv_capacity if total_pv_capacity > 0 else 0
+            pv_relative_cost = (self.data_model.pv_cost_curve['linear_coefficient'] * pv_relative +
+                              self.data_model.pv_cost_curve['constant_term'])
+            current_pv_cost = pv_relative_cost * self.data_model.pv_cost_curve['base_cost']
             
             # 当前小时的约束条件
             max_flexible_load = self.data_model.flexible_load_max
@@ -4884,11 +4878,11 @@ class EnergyBalanceApp:
             # 根据业务需求文档的算法思路进行优化
             if has_abandoned_energy:
                 # 当有弃风弃电存在时（没有下网负荷），且负荷单位收益大于风电和光伏单位成本时，应提高基础负荷或者灵活负荷
-                if basic_load_revenue > pv_cost and basic_load_revenue > wind_cost:
+                if basic_load_revenue > current_pv_cost and basic_load_revenue > current_wind_cost:
                     # 提高基础负荷到最大值（在约束范围内）
                     basic_load = max(min_basic_load, min(max_basic_load, max_basic_load))
                 
-                if flexible_load_revenue > pv_cost and flexible_load_revenue > wind_cost:
+                if flexible_load_revenue > current_pv_cost and flexible_load_revenue > current_wind_cost:
                     # 提高灵活负荷到最大值（在约束范围内）
                     flexible_load = max(min_flexible_load, min(max_flexible_load, max_flexible_load))
             else:
@@ -4963,12 +4957,14 @@ class EnergyBalanceApp:
                 generation = pv_output + wind_output + thermal_output
                 grid_load = total_load - generation
             
+            # 计算收益（使用动态成本）
+            # 注意：这里使用每小时实际计算的 current_thermal_cost, current_pv_cost, current_wind_cost
             revenue = (
                 basic_load * basic_load_revenue + 
                 flexible_load * flexible_load_revenue - 
-                thermal_output * thermal_cost - 
-                pv_output * pv_cost - 
-                wind_output * wind_cost
+                thermal_output * current_thermal_cost - 
+                pv_output * current_pv_cost - 
+                wind_output * current_wind_cost
             )
             
             if grid_load > 0:
@@ -5004,9 +5000,6 @@ class EnergyBalanceApp:
 优化参数:
 基础负荷单位收益: {basic_load_revenue} 元/kWh
 灵活负荷单位收益: {flexible_load_revenue} 元/kWh
-火电发电单位成本: {thermal_cost} 元/kWh
-光伏发电单位成本: {pv_cost} 元/kWh
-风机发电单位成本: {wind_cost} 元/kWh
 
 优化结果:
 总收益: {total_revenue:,.2f} 元
@@ -5069,14 +5062,16 @@ class EnergyBalanceApp:
                 original_grid_load = self.results['hourly_grid_load']  # 下网负荷
                 original_abandon_rate = self.results['hourly_abandon_rate']  # 弃风光率
                 
-                # 计算优化前的收益
+                # 计算优化前的收益（使用动态成本）
                 original_revenue = []
                 grid_price = self.data_model.grid_purchase_price_hourly
                 basic_load_revenue = self.basic_load_revenue.get()
                 flexible_load_revenue = self.flexible_load_revenue.get()
-                thermal_cost = self.thermal_cost.get()
-                pv_cost = self.pv_cost.get()
-                wind_cost = self.wind_cost.get()
+                
+                # 预计算装机容量用于成本计算
+                total_wind_capacity = self.data_model.calculate_wind_total_capacity()
+                total_pv_capacity = self.data_model.calculate_pv_total_capacity()
+                thermal_max_output = self.data_model.peak_power_max + self.data_model.chp_electric_params['base_electric']
                 
                 for i in range(8760):
                     chp_output = self.results['hourly_chp_output'][i]
@@ -5084,12 +5079,26 @@ class EnergyBalanceApp:
                     wind_output = self.results['hourly_wind_output'][i]
                     thermal_output = chp_output + original_peak_output[i]
                     
+                    # 计算动态成本
+                    thermal_relative = self.results['hourly_thermal_output'][i] / thermal_max_output if thermal_max_output > 0 else 0
+                    current_thermal_cost = (self.data_model.thermal_cost_curve['quadratic_coefficient'] * thermal_relative**2 +
+                                           self.data_model.thermal_cost_curve['linear_coefficient'] * thermal_relative +
+                                           self.data_model.thermal_cost_curve['constant_term']) * self.data_model.thermal_cost_curve['base_cost']
+                    
+                    wind_relative = wind_output / total_wind_capacity if total_wind_capacity > 0 else 0
+                    current_wind_cost = (self.data_model.wind_cost_curve['linear_coefficient'] * wind_relative +
+                                        self.data_model.wind_cost_curve['constant_term']) * self.data_model.wind_cost_curve['base_cost']
+                    
+                    pv_relative = pv_output / total_pv_capacity if total_pv_capacity > 0 else 0
+                    current_pv_cost = (self.data_model.pv_cost_curve['linear_coefficient'] * pv_relative +
+                                      self.data_model.pv_cost_curve['constant_term']) * self.data_model.pv_cost_curve['base_cost']
+                    
                     revenue = (
                         original_basic_load[i] * basic_load_revenue + 
                         original_flexible_load[i] * flexible_load_revenue - 
-                        thermal_output * thermal_cost - 
-                        pv_output * pv_cost - 
-                        wind_output * wind_cost
+                        thermal_output * current_thermal_cost - 
+                        pv_output * current_pv_cost - 
+                        wind_output * current_wind_cost
                     )
                     
                     if original_grid_load[i] > 0:
