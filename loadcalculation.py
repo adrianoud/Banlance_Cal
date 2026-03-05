@@ -9,8 +9,15 @@ import csv
 import json
 import os
 import sys
-import shutil  # 添加缺失的shutil导入
-from datetime import datetime, timedelta  # 添加对timedelta的导入
+import shutil  # 添加缺失的 shutil 导入
+from datetime import datetime, timedelta  # 添加对 timedelta 的导入
+
+# 导入成本优化模块
+try:
+    from cost_optimization import start_cost_optimization, export_cost_optimization_results
+except ImportError:
+    start_cost_optimization = None
+    export_cost_optimization_results = None
 
 
 # 尝试导入openpyxl用于Excel导出1
@@ -4742,11 +4749,21 @@ class EnergyBalanceApp:
         
         # 获取选择的优化方式
         optimization_mode = self.optimization_mode_var.get()
-        
-        # 检查是否选择了“整体优化”
+                
+        # 检查是否选择了"整体优化"
         if optimization_mode == "整体优化":
             messagebox.showinfo("提示", "整体优化功能暂不实现，请选择其他优化方式。")
             return
+                
+        # 根据优化模式调用不同的优化方法
+        if optimization_mode == "成本优化":
+            if start_cost_optimization:
+                start_cost_optimization(self)
+            else:
+                messagebox.showerror("错误", "成本优化模块未加载！")
+            return
+                
+        # 默认执行新能源优先的负荷优化
         
         # 获取优化参数
         basic_load_revenue = self.basic_load_revenue.get()
@@ -5051,10 +5068,24 @@ class EnergyBalanceApp:
     def export_optimization_results(self):
         """
         导出优化结果，包含优化前后的详细对比数据和汇总信息
+        根据优化模式（成本优化或新能源优先）导出不同的数据
         """
         if not hasattr(self, 'optimized_results') or not self.results:
             messagebox.showwarning("警告", "优化结果或平衡计算结果为空，无法导出！")
             return
+        
+        # 检查优化模式
+        optimization_mode = getattr(self, 'optimization_mode', 'renewable_priority')
+        
+        if optimization_mode == 'cost_optimization':
+            # 调用成本优化的导出函数
+            if export_cost_optimization_results:
+                export_cost_optimization_results(self)
+            else:
+                messagebox.showerror("错误", "成本优化导出模块未加载！")
+            return
+        
+        # 否则执行新能源优先模式的导出逻辑
         
         # 询问用户保存位置
         save_path = filedialog.asksaveasfilename(
@@ -5409,7 +5440,9 @@ class EnergyBalanceApp:
     def update_optimization_plot(self):
         """
         更新优化结果趋势图
-        包括优化前后的基础负荷、灵活负荷以及下网负荷对比
+        根据优化模式显示不同的内容：
+        - 新能源优先模式：显示优化前后的基础负荷、灵活负荷以及下网负荷对比
+        - 成本优化模式：显示优化前后的火电、风电、光伏、下网出力对比
         """
         # 检查是否有优化结果和平衡计算结果
         if not hasattr(self, 'optimized_results') or not self.results:
@@ -5421,10 +5454,10 @@ class EnergyBalanceApp:
             self.optimization_ax.set_title('优化结果趋势图')
             self.optimization_canvas.draw()
             return
-        
+            
         # 清除之前的图表
         self.optimization_ax.clear()
-        
+            
         # 解析时间段
         try:
             from datetime import datetime, timedelta
@@ -5433,21 +5466,31 @@ class EnergyBalanceApp:
         except ValueError:
             messagebox.showerror("错误", "日期格式不正确，请使用 YYYY-MM-DD 格式")
             return
-        
+            
         # 计算时间段对应的小时索引
         start_hour = self.date_to_hour(start_date)
         end_hour = self.date_to_hour(end_date)
-        
+            
         if start_hour > end_hour:
             messagebox.showerror("错误", "开始日期不能晚于结束日期")
             return
-        
+            
         if start_hour < 0 or end_hour >= 8760:
-            messagebox.showerror("错误", "日期超出范围，应在2025-01-01至2025-12-31之间")
+            messagebox.showerror("错误", "日期超出范围，应在 2025-01-01 至 2025-12-31 之间")
             return
-        
+            
         # 获取时间段内的数据
         hours = list(range(start_hour, end_hour + 1))
+            
+        # 检查优化模式
+        optimization_mode = getattr(self, 'optimization_mode', 'renewable_priority')
+            
+        if optimization_mode == 'cost_optimization':
+            # 成本优化模式：显示各发电设备出力对比
+            self._update_cost_optimization_plot(hours)
+        else:
+            # 新能源优先模式：显示负荷对比
+            self._update_renewable_priority_plot(hours)
         
         # 获取优化结果
         optimized_basic_load = [self.optimized_results['hourly_basic_load'][i] for i in hours]
@@ -5681,6 +5724,99 @@ class EnergyBalanceApp:
         
         # 刷新画布
         self.optimization_canvas.draw()
+    
+    def _update_cost_optimization_plot(self, hours):
+        """
+        更新成本优化模式的结果趋势图
+        显示优化前后的火电、风电、光伏、下网出力对比
+        """
+        try:
+            # 获取优化前的数据
+            original_thermal = [self.results['hourly_thermal_output'][i] for i in hours]
+            original_pv = [self.results['hourly_pv_output'][i] for i in hours]
+            original_wind = [self.results['hourly_wind_output'][i] for i in hours]
+            original_grid = [self.results['hourly_grid_load'][i] for i in hours]
+            
+            # 获取优化后的数据
+            optimized_thermal = [self.optimized_results['hourly_thermal_output'][i] for i in hours]
+            optimized_pv = [self.optimized_results['hourly_pv_output'][i] for i in hours]
+            optimized_wind = [self.optimized_results['hourly_wind_output'][i] for i in hours]
+            optimized_grid = [self.optimized_results['hourly_grid_load'][i] for i in hours]
+            
+            # 将小时转换为日期格式
+            from datetime import datetime, timedelta
+            dates = [datetime(2025, 1, 1) + timedelta(hours=h) for h in hours]
+            
+            # 绘制优化前的发电出力
+            line_thermal_orig, = self.optimization_ax.plot(dates, original_thermal, label='火电出力 (优化前)', 
+                                                          linewidth=0.8, color='red', linestyle='-')
+            line_pv_orig, = self.optimization_ax.plot(dates, original_pv, label='光伏出力 (优化前)', 
+                                                     linewidth=0.8, color='orange', linestyle='-')
+            line_wind_orig, = self.optimization_ax.plot(dates, original_wind, label='风电出力 (优化前)', 
+                                                       linewidth=0.8, color='blue', linestyle='-')
+            line_grid_orig, = self.optimization_ax.plot(dates, original_grid, label='下网负荷 (优化前)', 
+                                                       linewidth=0.8, color='gray', linestyle='-')
+            
+            # 绘制优化后的发电出力（使用虚线）
+            line_thermal_opt, = self.optimization_ax.plot(dates, optimized_thermal, label='火电出力 (优化后)', 
+                                                         linewidth=0.8, color='red', linestyle='--')
+            line_pv_opt, = self.optimization_ax.plot(dates, optimized_pv, label='光伏出力 (优化后)', 
+                                                    linewidth=0.8, color='orange', linestyle='--')
+            line_wind_opt, = self.optimization_ax.plot(dates, optimized_wind, label='风电出力 (优化后)', 
+                                                      linewidth=0.8, color='blue', linestyle='--')
+            line_grid_opt, = self.optimization_ax.plot(dates, optimized_grid, label='下网负荷 (优化后)', 
+                                                      linewidth=0.8, color='gray', linestyle='--')
+            
+            self.optimization_ax.set_xlabel('日期 (MM-DD)')
+            self.optimization_ax.set_ylabel('功率 (kW)')
+            self.optimization_ax.set_title('成本优化结果 - 发电出力对比')
+            
+            # 设置 x 轴日期格式
+            self.optimization_ax.xaxis.set_major_formatter(plt.matplotlib.dates.DateFormatter('%m-%d'))
+            
+            # 根据时间跨度自动选择适当的日期定位器
+            date_span = (dates[-1] - dates[0]).days
+            if date_span <= 31:
+                self.optimization_ax.xaxis.set_major_locator(plt.matplotlib.dates.DayLocator(interval=1))
+            elif date_span <= 180:
+                self.optimization_ax.xaxis.set_major_locator(plt.matplotlib.dates.DayLocator(interval=7))
+            elif date_span <= 365:
+                self.optimization_ax.xaxis.set_major_locator(plt.matplotlib.dates.DayLocator(interval=14))
+            else:
+                self.optimization_ax.xaxis.set_major_locator(plt.matplotlib.dates.MonthLocator())
+            
+            # 旋转 x 轴标签
+            plt.setp(self.optimization_ax.xaxis.get_majorticklabels(), rotation=45, ha='right')
+            
+            # 创建图例并启用点击功能
+            legend = self.optimization_ax.legend(loc='upper left', bbox_to_anchor=(1, 1))
+            
+            # 启用图例点击交互
+            lines = [line_thermal_orig, line_pv_orig, line_wind_orig, line_grid_orig,
+                    line_thermal_opt, line_pv_opt, line_wind_opt, line_grid_opt]
+            
+            lined = {}
+            for legline, origline in zip(legend.get_lines(), lines):
+                legline.set_picker(True)
+                lined[legline] = origline
+            
+            for legtext, origline in zip(legend.get_texts(), lines):
+                legtext.set_picker(True)
+                lined[legtext] = origline
+            
+            self.lined_optimization = lined
+            self.optimization_canvas.mpl_connect('pick_event', self.on_legend_click_optimization)
+            self.optimization_canvas.mpl_connect('motion_notify_event', self.on_optimization_hover)
+            
+            self.optimization_ax.grid(True, alpha=0.3)
+            self.optimization_ax.set_xlim(dates[0], dates[-1])
+            self.optimization_figure.tight_layout()
+            self.optimization_figure.subplots_adjust(right=0.85)
+            self.optimization_canvas.draw()
+            
+        except Exception as e:
+            print(f"绘制成本优化图表时出错：{e}")
+            messagebox.showerror("错误", f"绘制优化结果图表失败：{str(e)}")
         
     def on_legend_click_optimization(self, event):
         """
