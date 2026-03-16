@@ -43926,9 +43926,13 @@
     "thermal_carbon_price": 100.0,
     "thermal_green_ratio": 0.3,
     "thermal_green_cert_price": 0.008,
-    "thermal_coal_quadratic": 0.0,
+    "thermal_coal_quadratic": 1.0,
     "thermal_coal_linear": -0.4,
-    "thermal_coal_constant": 1.4
+    "thermal_coal_constant": 2.0,
+    "grid_transmission_price": 0.0486,
+    "grid_line_loss_price": 0.017,
+    "grid_operation_price": 0.065,
+    "grid_government_fund": 0.0041
   },
   "optimized_results": {
     "hourly_thermal_output": [

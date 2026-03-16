@@ -416,6 +416,10 @@ class EnergyDataModel:
         # 加载成本详细分析参数（新增）
         self.detailed_cost_params = data.get('detailed_cost_params', {
             'grid_base_cost': 3485.0,
+            'grid_transmission_price': 0.0486,
+            'grid_line_loss_price': 0.017,
+            'grid_operation_price': 0.065,
+            'grid_government_fund': 0.0041,
             'pv_depreciation': 14000.0,
             'pv_backup_fee': 0.069,
             'wind_depreciation': 10000.0,
@@ -4590,6 +4594,23 @@ class EnergyBalanceApp:
         self.detailed_grid_base_cost_var = tk.DoubleVar(value=3485.0)
         ttk.Entry(grid_price_frame, textvariable=self.detailed_grid_base_cost_var, width=15).grid(row=0, column=1, pady=3, padx=5)
         
+        # 新增 4 项附加费用
+        ttk.Label(grid_price_frame, text="输配电费 (元/kWh):").grid(row=1, column=0, sticky=tk.W, pady=3, padx=5)
+        self.detailed_grid_transmission_price_var = tk.DoubleVar(value=0.0486)
+        ttk.Entry(grid_price_frame, textvariable=self.detailed_grid_transmission_price_var, width=15).grid(row=1, column=1, pady=3, padx=5)
+        
+        ttk.Label(grid_price_frame, text="线损费用 (元/kWh):").grid(row=2, column=0, sticky=tk.W, pady=3, padx=5)
+        self.detailed_grid_line_loss_price_var = tk.DoubleVar(value=0.017)
+        ttk.Entry(grid_price_frame, textvariable=self.detailed_grid_line_loss_price_var, width=15).grid(row=2, column=1, pady=3, padx=5)
+        
+        ttk.Label(grid_price_frame, text="系统运行费 (元/kWh):").grid(row=3, column=0, sticky=tk.W, pady=3, padx=5)
+        self.detailed_grid_operation_price_var = tk.DoubleVar(value=0.065)
+        ttk.Entry(grid_price_frame, textvariable=self.detailed_grid_operation_price_var, width=15).grid(row=3, column=1, pady=3, padx=5)
+        
+        ttk.Label(grid_price_frame, text="政府性基金 (元/kWh):").grid(row=4, column=0, sticky=tk.W, pady=3, padx=5)
+        self.detailed_grid_government_fund_var = tk.DoubleVar(value=0.0041)
+        ttk.Entry(grid_price_frame, textvariable=self.detailed_grid_government_fund_var, width=15).grid(row=4, column=1, pady=3, padx=5)
+        
         # === 2. 光伏成本输入 ===
         pv_cost_frame = ttk.LabelFrame(left_input_frame, text="2. 光伏成本", padding="8")
         pv_cost_frame.grid(row=row_idx, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=5)
@@ -4988,6 +5009,11 @@ class EnergyBalanceApp:
         try:
             # 保存成本详细分析的所有输入参数
             self.data_model.detailed_cost_params['grid_base_cost'] = self.detailed_grid_base_cost_var.get()
+            self.data_model.detailed_cost_params['grid_transmission_price'] = self.detailed_grid_transmission_price_var.get()
+            self.data_model.detailed_cost_params['grid_line_loss_price'] = self.detailed_grid_line_loss_price_var.get()
+            self.data_model.detailed_cost_params['grid_operation_price'] = self.detailed_grid_operation_price_var.get()
+            self.data_model.detailed_cost_params['grid_government_fund'] = self.detailed_grid_government_fund_var.get()
+            
             self.data_model.detailed_cost_params['pv_depreciation'] = self.detailed_pv_depreciation_var.get()
             self.data_model.detailed_cost_params['pv_backup_fee'] = self.detailed_pv_backup_fee_var.get()
             self.data_model.detailed_cost_params['wind_depreciation'] = self.detailed_wind_depreciation_var.get()
@@ -5025,6 +5051,11 @@ class EnergyBalanceApp:
         try:
             # 加载成本详细分析的所有输入参数
             self.detailed_grid_base_cost_var.set(self.data_model.detailed_cost_params.get('grid_base_cost', 3485.0))
+            self.detailed_grid_transmission_price_var.set(self.data_model.detailed_cost_params.get('grid_transmission_price', 0.0486))
+            self.detailed_grid_line_loss_price_var.set(self.data_model.detailed_cost_params.get('grid_line_loss_price', 0.017))
+            self.detailed_grid_operation_price_var.set(self.data_model.detailed_cost_params.get('grid_operation_price', 0.065))
+            self.detailed_grid_government_fund_var.set(self.data_model.detailed_cost_params.get('grid_government_fund', 0.0041))
+            
             self.detailed_pv_depreciation_var.set(self.data_model.detailed_cost_params.get('pv_depreciation', 14000.0))
             self.detailed_pv_backup_fee_var.set(self.data_model.detailed_cost_params.get('pv_backup_fee', 0.069))
             self.detailed_wind_depreciation_var.set(self.data_model.detailed_cost_params.get('wind_depreciation', 10000.0))
