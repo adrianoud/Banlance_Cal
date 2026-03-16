@@ -428,6 +428,11 @@ class EnergyDataModel:
             'other_variable_cost': 0.0,
             'thermal_manufacturing_cost': 19535.0,
             'thermal_labor_cost': 4046.0,
+            'thermal_government_fund': 0.0241,
+            'thermal_policy_subsidy': 0.0128,
+            'thermal_reserve_fee_mode': 0,  # 0=单价计费，1=总价计费
+            'thermal_reserve_fee_unit': 0.05,
+            'thermal_reserve_fee_total': 0.0,
             'thermal_coal_price': 162.4,
             'thermal_base_coal': 500.0,
             'thermal_carbon_alloc': 0.8049,
@@ -4650,11 +4655,11 @@ class EnergyBalanceApp:
         self.detailed_other_variable_cost_var = tk.DoubleVar(value=0.0)
         ttk.Entry(other_cost_frame, textvariable=self.detailed_other_variable_cost_var, width=15).grid(row=1, column=1, pady=3, padx=5)
         
-        # 第 2 列：火电发电成本输入
-        middle_input_frame = ttk.LabelFrame(top_input_frame, text="5. 火电发电成本", padding="10")
+        # 第 2 列：火电成本输入
+        middle_input_frame = ttk.LabelFrame(top_input_frame, text="5. 火电成本", padding="10")
         middle_input_frame.grid(row=0, column=1, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(5, 5))
         
-        # === 5. 火电发电成本输入 ===
+        # === 5. 火电成本输入 ===
         thermal_row = 0
         
         # 新增两项：火电制造成本和火电人工成本
@@ -4671,6 +4676,46 @@ class EnergyBalanceApp:
         # 分隔线
         ttk.Separator(middle_input_frame, orient='horizontal').grid(row=thermal_row, column=0, columnspan=2, sticky='ew', pady=10)
         thermal_row += 1
+        
+        # 政府性基金
+        ttk.Label(middle_input_frame, text="政府性基金 (元/kWh):").grid(row=thermal_row, column=0, sticky=tk.W, pady=3, padx=5)
+        self.detailed_thermal_government_fund_var = tk.DoubleVar(value=0.0241)
+        ttk.Entry(middle_input_frame, textvariable=self.detailed_thermal_government_fund_var, width=15).grid(row=thermal_row, column=1, pady=3, padx=5)
+        thermal_row += 1
+        
+        # 政策性交叉补贴
+        ttk.Label(middle_input_frame, text="政策性交叉补贴 (元/kWh):").grid(row=thermal_row, column=0, sticky=tk.W, pady=3, padx=5)
+        self.detailed_thermal_policy_subsidy_var = tk.DoubleVar(value=0.0128)
+        ttk.Entry(middle_input_frame, textvariable=self.detailed_thermal_policy_subsidy_var, width=15).grid(row=thermal_row, column=1, pady=3, padx=5)
+        thermal_row += 1
+        
+        # 分隔线
+        ttk.Separator(middle_input_frame, orient='horizontal').grid(row=thermal_row, column=0, columnspan=2, sticky='ew', pady=10)
+        thermal_row += 1
+        
+        # 备容费（单选按钮切换计费方式）
+        reserve_fee_frame = ttk.LabelFrame(middle_input_frame, text="备容费", padding="5")
+        reserve_fee_frame.grid(row=thermal_row, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=5)
+        thermal_row += 1
+        
+        # 单选按钮变量
+        self.detailed_thermal_reserve_fee_mode_var = tk.IntVar(value=0)  # 0=单价计费，1=总价计费
+        
+        # 单价计费方式
+        unit_price_frame = ttk.Frame(reserve_fee_frame)
+        unit_price_frame.grid(row=0, column=0, columnspan=2, sticky=tk.W, pady=2)
+        ttk.Radiobutton(unit_price_frame, text="单价计费", variable=self.detailed_thermal_reserve_fee_mode_var, value=0).pack(side=tk.LEFT)
+        ttk.Label(unit_price_frame, text="备容费单价 (元/kWh):").pack(side=tk.LEFT, padx=(10, 5))
+        self.detailed_thermal_reserve_fee_unit_var = tk.DoubleVar(value=0.05)
+        ttk.Entry(unit_price_frame, textvariable=self.detailed_thermal_reserve_fee_unit_var, width=10).pack(side=tk.LEFT)
+        
+        # 总价计费方式
+        total_price_frame = ttk.Frame(reserve_fee_frame)
+        total_price_frame.grid(row=1, column=0, columnspan=2, sticky=tk.W, pady=2)
+        ttk.Radiobutton(total_price_frame, text="总价计费", variable=self.detailed_thermal_reserve_fee_mode_var, value=1).pack(side=tk.LEFT)
+        ttk.Label(total_price_frame, text="备容费总额 (万元):").pack(side=tk.LEFT, padx=(10, 5))
+        self.detailed_thermal_reserve_fee_total_var = tk.DoubleVar(value=0.0)
+        ttk.Entry(total_price_frame, textvariable=self.detailed_thermal_reserve_fee_total_var, width=10).pack(side=tk.LEFT)
         
         ttk.Label(middle_input_frame, text="入炉煤综合单价 (元/吨):").grid(row=thermal_row, column=0, sticky=tk.W, pady=3, padx=5)
         self.detailed_thermal_coal_price_var = tk.DoubleVar(value=162.4)
@@ -5024,6 +5069,12 @@ class EnergyBalanceApp:
             # 火电成本参数
             self.data_model.detailed_cost_params['thermal_manufacturing_cost'] = self.detailed_thermal_manufacturing_cost_var.get()
             self.data_model.detailed_cost_params['thermal_labor_cost'] = self.detailed_thermal_labor_cost_var.get()
+            self.data_model.detailed_cost_params['thermal_government_fund'] = self.detailed_thermal_government_fund_var.get()
+            self.data_model.detailed_cost_params['thermal_policy_subsidy'] = self.detailed_thermal_policy_subsidy_var.get()
+            self.data_model.detailed_cost_params['thermal_reserve_fee_mode'] = self.detailed_thermal_reserve_fee_mode_var.get()
+            self.data_model.detailed_cost_params['thermal_reserve_fee_unit'] = self.detailed_thermal_reserve_fee_unit_var.get()
+            self.data_model.detailed_cost_params['thermal_reserve_fee_total'] = self.detailed_thermal_reserve_fee_total_var.get()
+            
             self.data_model.detailed_cost_params['thermal_coal_price'] = self.detailed_thermal_coal_price_var.get()
             self.data_model.detailed_cost_params['thermal_base_coal'] = self.detailed_thermal_base_coal_var.get()
             self.data_model.detailed_cost_params['thermal_carbon_alloc'] = self.detailed_thermal_carbon_alloc_var.get()
@@ -5066,6 +5117,12 @@ class EnergyBalanceApp:
             # 火电成本参数
             self.detailed_thermal_manufacturing_cost_var.set(self.data_model.detailed_cost_params.get('thermal_manufacturing_cost', 19535.0))
             self.detailed_thermal_labor_cost_var.set(self.data_model.detailed_cost_params.get('thermal_labor_cost', 4046.0))
+            self.detailed_thermal_government_fund_var.set(self.data_model.detailed_cost_params.get('thermal_government_fund', 0.0241))
+            self.detailed_thermal_policy_subsidy_var.set(self.data_model.detailed_cost_params.get('thermal_policy_subsidy', 0.0128))
+            self.detailed_thermal_reserve_fee_mode_var.set(self.data_model.detailed_cost_params.get('thermal_reserve_fee_mode', 0))
+            self.detailed_thermal_reserve_fee_unit_var.set(self.data_model.detailed_cost_params.get('thermal_reserve_fee_unit', 0.05))
+            self.detailed_thermal_reserve_fee_total_var.set(self.data_model.detailed_cost_params.get('thermal_reserve_fee_total', 0.0))
+            
             self.detailed_thermal_coal_price_var.set(self.data_model.detailed_cost_params.get('thermal_coal_price', 162.4))
             self.detailed_thermal_base_coal_var.set(self.data_model.detailed_cost_params.get('thermal_base_coal', 500.0))
             self.detailed_thermal_carbon_alloc_var.set(self.data_model.detailed_cost_params.get('thermal_carbon_alloc', 0.8049))
