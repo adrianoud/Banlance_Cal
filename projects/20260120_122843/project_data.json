@@ -43910,6 +43910,26 @@
     "constant_term": 1.0,
     "base_cost": 0.2
   },
+  "detailed_cost_params": {
+    "grid_base_cost": 3485.0,
+    "pv_depreciation": 14000.0,
+    "pv_backup_fee": 0.069,
+    "wind_depreciation": 10000.0,
+    "wind_backup_fee": 0.05,
+    "other_fixed_cost": 0.0,
+    "other_variable_cost": 0.0,
+    "thermal_manufacturing_cost": 19535.0,
+    "thermal_labor_cost": 4046.0,
+    "thermal_coal_price": 162.4,
+    "thermal_base_coal": 500.0,
+    "thermal_carbon_alloc": 0.8049,
+    "thermal_carbon_price": 100.0,
+    "thermal_green_ratio": 0.3,
+    "thermal_green_cert_price": 0.008,
+    "thermal_coal_quadratic": 0.0,
+    "thermal_coal_linear": -0.4,
+    "thermal_coal_constant": 1.4
+  },
   "optimized_results": {
     "hourly_thermal_output": [
       230000.0,

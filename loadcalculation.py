@@ -314,6 +314,7 @@ class EnergyDataModel:
             'thermal_cost_curve': self.thermal_cost_curve,  # 新增
             'wind_cost_curve': self.wind_cost_curve,        # 新增
             'pv_cost_curve': self.pv_cost_curve,            # 新增
+            'detailed_cost_params': self.detailed_cost_params,  # 新增成本详细分析参数
             'optimized_results': getattr(self, 'optimized_results', None)
         }
         return data
@@ -404,6 +405,28 @@ class EnergyDataModel:
             'linear_coefficient': 0.0,
             'constant_term': 1.0,
             'base_cost': 0.05
+        })
+        
+        # 加载成本详细分析参数（新增）
+        self.detailed_cost_params = data.get('detailed_cost_params', {
+            'grid_base_cost': 3485.0,
+            'pv_depreciation': 14000.0,
+            'pv_backup_fee': 0.069,
+            'wind_depreciation': 10000.0,
+            'wind_backup_fee': 0.05,
+            'other_fixed_cost': 0.0,
+            'other_variable_cost': 0.0,
+            'thermal_manufacturing_cost': 19535.0,
+            'thermal_labor_cost': 4046.0,
+            'thermal_coal_price': 162.4,
+            'thermal_base_coal': 500.0,
+            'thermal_carbon_alloc': 0.8049,
+            'thermal_carbon_price': 80.0,
+            'thermal_green_ratio': 0.3,
+            'thermal_green_cert_price': 0.008,
+            'thermal_coal_quadratic': 0.0,
+            'thermal_coal_linear': -0.4,
+            'thermal_coal_constant': 1.4
         })
         
         # 加载优化结果（如果有）
@@ -1420,6 +1443,9 @@ class EnergyBalanceApp:
                     self.results = project_data['calculation_results']
                     self.display_results()
                     self.update_plot()
+                
+                # 加载成本详细分析参数
+                self.load_detailed_cost_parameters()
         
     def return_to_project_list(self):
         """返回项目列表界面"""
@@ -4522,9 +4548,17 @@ class EnergyBalanceApp:
         tab = ttk.Frame(notebook, padding="10")
         notebook.add(tab, text="📊 成本详细分析")  # 添加成本分析图标
         
+        # 顶部按钮区域
+        top_button_frame = ttk.Frame(tab)
+        top_button_frame.grid(row=0, column=0, sticky=tk.E, padx=5, pady=5)
+        
+        # 添加保存按钮
+        save_btn = ttk.Button(top_button_frame, text="💾 保存成本参数", command=self.save_detailed_cost_parameters)
+        save_btn.pack(side=tk.RIGHT, padx=5)
+        
         # 添加返回项目列表按钮
-        back_btn = ttk.Button(tab, text="保存并返回项目列表", command=self.save_and_return_to_project_list)
-        back_btn.grid(row=0, column=0, sticky=tk.E, padx=5, pady=5)
+        back_btn = ttk.Button(top_button_frame, text="保存并返回项目列表", command=self.save_and_return_to_project_list)
+        back_btn.pack(side=tk.RIGHT, padx=5)
         
         # ===== 上方输入区域 =====
         top_input_frame = ttk.Frame(tab)
@@ -4841,6 +4875,78 @@ class EnergyBalanceApp:
             
         except Exception as e:
             messagebox.showerror("错误", f"保存成本参数失败：{str(e)}")
+    
+    def save_detailed_cost_parameters(self):
+        """
+        保存成本详细分析输入项到数据模型
+        """
+        try:
+            # 保存成本详细分析的所有输入参数
+            self.data_model.detailed_cost_params['grid_base_cost'] = self.detailed_grid_base_cost_var.get()
+            self.data_model.detailed_cost_params['pv_depreciation'] = self.detailed_pv_depreciation_var.get()
+            self.data_model.detailed_cost_params['pv_backup_fee'] = self.detailed_pv_backup_fee_var.get()
+            self.data_model.detailed_cost_params['wind_depreciation'] = self.detailed_wind_depreciation_var.get()
+            self.data_model.detailed_cost_params['wind_backup_fee'] = self.detailed_wind_backup_fee_var.get()
+            self.data_model.detailed_cost_params['other_fixed_cost'] = self.detailed_other_fixed_cost_var.get()
+            self.data_model.detailed_cost_params['other_variable_cost'] = self.detailed_other_variable_cost_var.get()
+            
+            # 火电成本参数
+            self.data_model.detailed_cost_params['thermal_manufacturing_cost'] = self.detailed_thermal_manufacturing_cost_var.get()
+            self.data_model.detailed_cost_params['thermal_labor_cost'] = self.detailed_thermal_labor_cost_var.get()
+            self.data_model.detailed_cost_params['thermal_coal_price'] = self.detailed_thermal_coal_price_var.get()
+            self.data_model.detailed_cost_params['thermal_base_coal'] = self.detailed_thermal_base_coal_var.get()
+            self.data_model.detailed_cost_params['thermal_carbon_alloc'] = self.detailed_thermal_carbon_alloc_var.get()
+            self.data_model.detailed_cost_params['thermal_carbon_price'] = self.detailed_thermal_carbon_price_var.get()
+            self.data_model.detailed_cost_params['thermal_green_ratio'] = self.detailed_thermal_green_ratio_var.get()
+            self.data_model.detailed_cost_params['thermal_green_cert_price'] = self.detailed_thermal_green_cert_price_var.get()
+            
+            # 火电煤耗变化曲线参数
+            self.data_model.detailed_cost_params['thermal_coal_quadratic'] = self.detailed_thermal_coal_quadratic_var.get()
+            self.data_model.detailed_cost_params['thermal_coal_linear'] = self.detailed_thermal_coal_linear_var.get()
+            self.data_model.detailed_cost_params['thermal_coal_constant'] = self.detailed_thermal_coal_constant_var.get()
+            
+            # 保存项目数据
+            self.save_current_project()
+            
+            messagebox.showinfo("成功", "成本详细分析参数已保存！")
+            
+        except Exception as e:
+            messagebox.showerror("错误", f"保存成本详细分析参数失败：{str(e)}")
+    
+    def load_detailed_cost_parameters(self):
+        """
+        从数据模型加载成本详细分析输入项到 UI
+        """
+        try:
+            # 加载成本详细分析的所有输入参数
+            self.detailed_grid_base_cost_var.set(self.data_model.detailed_cost_params.get('grid_base_cost', 3485.0))
+            self.detailed_pv_depreciation_var.set(self.data_model.detailed_cost_params.get('pv_depreciation', 14000.0))
+            self.detailed_pv_backup_fee_var.set(self.data_model.detailed_cost_params.get('pv_backup_fee', 0.069))
+            self.detailed_wind_depreciation_var.set(self.data_model.detailed_cost_params.get('wind_depreciation', 10000.0))
+            self.detailed_wind_backup_fee_var.set(self.data_model.detailed_cost_params.get('wind_backup_fee', 0.05))
+            self.detailed_other_fixed_cost_var.set(self.data_model.detailed_cost_params.get('other_fixed_cost', 0.0))
+            self.detailed_other_variable_cost_var.set(self.data_model.detailed_cost_params.get('other_variable_cost', 0.0))
+            
+            # 火电成本参数
+            self.detailed_thermal_manufacturing_cost_var.set(self.data_model.detailed_cost_params.get('thermal_manufacturing_cost', 19535.0))
+            self.detailed_thermal_labor_cost_var.set(self.data_model.detailed_cost_params.get('thermal_labor_cost', 4046.0))
+            self.detailed_thermal_coal_price_var.set(self.data_model.detailed_cost_params.get('thermal_coal_price', 162.4))
+            self.detailed_thermal_base_coal_var.set(self.data_model.detailed_cost_params.get('thermal_base_coal', 500.0))
+            self.detailed_thermal_carbon_alloc_var.set(self.data_model.detailed_cost_params.get('thermal_carbon_alloc', 0.8049))
+            self.detailed_thermal_carbon_price_var.set(self.data_model.detailed_cost_params.get('thermal_carbon_price', 80.0))
+            self.detailed_thermal_green_ratio_var.set(self.data_model.detailed_cost_params.get('thermal_green_ratio', 0.3))
+            self.detailed_thermal_green_cert_price_var.set(self.data_model.detailed_cost_params.get('thermal_green_cert_price', 0.008))
+            
+            # 火电煤耗变化曲线参数
+            self.detailed_thermal_coal_quadratic_var.set(self.data_model.detailed_cost_params.get('thermal_coal_quadratic', 0.0))
+            self.detailed_thermal_coal_linear_var.set(self.data_model.detailed_cost_params.get('thermal_coal_linear', -0.4))
+            self.detailed_thermal_coal_constant_var.set(self.data_model.detailed_cost_params.get('thermal_coal_constant', 1.4))
+            
+            # 刷新曲线图表
+            self.init_thermal_coal_curve()
+            
+        except Exception as e:
+            print(f"加载成本详细分析参数失败：{str(e)}")
     
     def refresh_cost_data(self):
         """
