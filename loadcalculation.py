@@ -1460,6 +1460,9 @@ class EnergyBalanceApp:
         # 优化标签页
         self.create_optimization_tab(notebook)
         
+        # 成本详细分析标签页
+        self.create_detailed_cost_analysis_tab(notebook)
+        
         # 配置网格权重
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
@@ -4508,6 +4511,136 @@ class EnergyBalanceApp:
         self.initialize_cost_curves()
         # 初始化 8760 小时成本趋势图
         self.initialize_hourly_cost_plot()
+    
+    def create_detailed_cost_analysis_tab(self, notebook):
+        """
+        创建成本详细分析标签页
+        UI 布局：
+        - 上方为输入区域（左右布局）
+        - 下方为结果展示（左右布局）
+        """
+        tab = ttk.Frame(notebook, padding="10")
+        notebook.add(tab, text="📊 成本详细分析")  # 添加成本分析图标
+        
+        # 添加返回项目列表按钮
+        back_btn = ttk.Button(tab, text="保存并返回项目列表", command=self.save_and_return_to_project_list)
+        back_btn.grid(row=0, column=0, sticky=tk.E, padx=5, pady=5)
+        
+        # ===== 上方输入区域 =====
+        top_input_frame = ttk.Frame(tab)
+        top_input_frame.grid(row=1, column=0, sticky=(tk.W, tk.E), pady=(0, 10))
+        
+        # 左半部分：下网成本和光伏成本
+        left_input_frame = ttk.LabelFrame(top_input_frame, text="成本输入 (1/2)", padding="10")
+        left_input_frame.grid(row=0, column=0, sticky=(tk.W, tk.E), padx=(0, 5))
+        
+        # 下网电价输入
+        ttk.Label(left_input_frame, text="下网电价 (元/kWh):").grid(row=0, column=0, sticky=tk.W, pady=5)
+        self.detailed_grid_price_var = tk.DoubleVar(value=0.0)
+        ttk.Entry(left_input_frame, textvariable=self.detailed_grid_price_var, width=20).grid(row=0, column=1, pady=5, padx=(10, 0))
+        
+        # 光伏发电成本输入
+        ttk.Label(left_input_frame, text="光伏发电成本 (元/kWh):").grid(row=1, column=0, sticky=tk.W, pady=5)
+        self.detailed_pv_cost_var = tk.DoubleVar(value=0.05)
+        ttk.Entry(left_input_frame, textvariable=self.detailed_pv_cost_var, width=20).grid(row=1, column=1, pady=5, padx=(10, 0))
+        
+        # 右半部分：风电成本和火电成本
+        right_input_frame = ttk.LabelFrame(top_input_frame, text="成本输入 (2/2)", padding="10")
+        right_input_frame.grid(row=0, column=1, sticky=(tk.W, tk.E), padx=(5, 0))
+        
+        # 风机发电成本输入
+        ttk.Label(right_input_frame, text="风机发电成本 (元/kWh):").grid(row=0, column=0, sticky=tk.W, pady=5)
+        self.detailed_wind_cost_var = tk.DoubleVar(value=0.05)
+        ttk.Entry(right_input_frame, textvariable=self.detailed_wind_cost_var, width=20).grid(row=0, column=1, pady=5, padx=(10, 0))
+        
+        # 火电发电成本输入
+        ttk.Label(right_input_frame, text="火电发电成本 (元/kWh):").grid(row=1, column=0, sticky=tk.W, pady=5)
+        self.detailed_thermal_cost_var = tk.DoubleVar(value=0.2)
+        ttk.Entry(right_input_frame, textvariable=self.detailed_thermal_cost_var, width=20).grid(row=1, column=1, pady=5, padx=(10, 0))
+        
+        # 其他成本输入（预留）
+        ttk.Label(right_input_frame, text="其他成本 (元/kWh):").grid(row=2, column=0, sticky=tk.W, pady=5)
+        self.detailed_other_cost_var = tk.DoubleVar(value=0.0)
+        ttk.Entry(right_input_frame, textvariable=self.detailed_other_cost_var, width=20).grid(row=2, column=1, pady=5, padx=(10, 0))
+        
+        # 配置权重
+        top_input_frame.columnconfigure(0, weight=1)
+        top_input_frame.columnconfigure(1, weight=1)
+        
+        # ===== 下方结果展示区域 =====
+        bottom_result_frame = ttk.Frame(tab)
+        bottom_result_frame.grid(row=2, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(0, 10))
+        
+        # 左侧：8760 小时趋势图
+        left_plot_frame = ttk.LabelFrame(bottom_result_frame, text="8760 小时发电出力及下网负荷趋势", padding="10")
+        left_plot_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(0, 5))
+        
+        # 创建 matplotlib 图形
+        self.detailed_cost_figure = Figure(figsize=(8, 6), dpi=100)
+        self.detailed_cost_ax = self.detailed_cost_figure.add_subplot(111)
+        self.detailed_cost_canvas = FigureCanvasTkAgg(self.detailed_cost_figure, left_plot_frame)
+        self.detailed_cost_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True, pady=5)
+        
+        # 右侧：年度汇总值
+        right_summary_frame = ttk.LabelFrame(bottom_result_frame, text="年度汇总", padding="10")
+        right_summary_frame.grid(row=0, column=1, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(5, 0))
+        
+        # 年度汇总表格
+        columns = ('项目', '数值')
+        self.detailed_summary_tree = ttk.Treeview(right_summary_frame, columns=columns, show='headings', height=15)
+        self.detailed_summary_tree.heading('项目', text='项目')
+        self.detailed_summary_tree.heading('数值', text='数值')
+        self.detailed_summary_tree.column('项目', width=150)
+        self.detailed_summary_tree.column('数值', width=150)
+        
+        # 添加滚动条
+        summary_scrollbar = ttk.Scrollbar(right_summary_frame, orient=tk.VERTICAL, command=self.detailed_summary_tree.yview)
+        self.detailed_summary_tree.configure(yscrollcommand=summary_scrollbar.set)
+        
+        self.detailed_summary_tree.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        summary_scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
+        
+        # 初始化汇总数据
+        self.init_detailed_cost_summary()
+        
+        # 配置权重
+        bottom_result_frame.columnconfigure(0, weight=2)
+        bottom_result_frame.columnconfigure(1, weight=1)
+        bottom_result_frame.rowconfigure(0, weight=1)
+        left_plot_frame.columnconfigure(0, weight=1)
+        left_plot_frame.rowconfigure(0, weight=1)
+        right_summary_frame.columnconfigure(0, weight=1)
+        right_summary_frame.rowconfigure(0, weight=1)
+        
+        # 配置整体权重
+        tab.columnconfigure(0, weight=1)
+        tab.rowconfigure(2, weight=1)  # 结果展示区域可伸缩
+    
+    def init_detailed_cost_summary(self):
+        """
+        初始化成本详细分析汇总表格
+        """
+        # 清空现有数据
+        for item in self.detailed_summary_tree.get_children():
+            self.detailed_summary_tree.delete(item)
+        
+        # 添加初始汇总数据
+        summary_data = [
+            ('年度总成本', '0.00 元'),
+            ('火电总成本', '0.00 元'),
+            ('光伏总成本', '0.00 元'),
+            ('风电总成本', '0.00 元'),
+            ('下网总成本', '0.00 元'),
+            ('其他总成本', '0.00 元'),
+            ('平均小时成本', '0.00 元'),
+            ('火电总出力', '0.00 kWh'),
+            ('光伏总出力', '0.00 kWh'),
+            ('风电总出力', '0.00 kWh'),
+            ('下网总负荷', '0.00 kWh'),
+        ]
+        
+        for item, value in summary_data:
+            self.detailed_summary_tree.insert('', tk.END, values=(item, value))
     
     def initialize_cost_curves(self):
         """
