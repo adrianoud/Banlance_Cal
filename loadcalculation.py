@@ -5488,37 +5488,36 @@ class EnergyBalanceApp:
         if optimization_mode == 'cost_optimization':
             # 成本优化模式：显示各发电设备出力对比
             self._update_cost_optimization_plot(hours)
+            return  # 成本优化模式直接返回
         else:
             # 新能源优先模式：显示负荷对比
-            self._update_renewable_priority_plot(hours)
-        
-        # 获取优化结果
-        optimized_basic_load = [self.optimized_results['hourly_basic_load'][i] for i in hours]
-        optimized_flexible_load = [self.optimized_results['hourly_flexible_load'][i] for i in hours]
-        
-        # 计算优化后的各发电设备出力和负荷（包含厂用电负荷的迭代计算）
-        try:
-            # 计算优化后的光伏出力、风机出力、调峰机组出力、总负荷等
-            optimized_pv_output = []
-            optimized_wind_output = []
-            optimized_peak_output = []
-            optimized_grid_load = []
-            optimized_internal_load = []
-            optimized_total_load = []
+            # 获取优化结果
+            optimized_basic_load = [self.optimized_results['hourly_basic_load'][i] for i in hours]
+            optimized_flexible_load = [self.optimized_results['hourly_flexible_load'][i] for i in hours]
             
-            for idx, i in enumerate(hours):
-                # 使用迭代方法计算优化后的厂用电负荷和总负荷
-                basic_load = optimized_basic_load[idx]
-                flexible_load = optimized_flexible_load[idx]
-                initial_total_load = basic_load + flexible_load
-                
-                # 使用平衡计算中的迭代方法
-                max_iterations = 10  # 最大迭代次数
-                tolerance = 1e-6     # 收敛阈值
-                
-                # 初始化厂用电负荷和总负荷
-                internal_electric_load = initial_total_load * self.data_model.internal_electric_rate
-                total_load = initial_total_load + internal_electric_load
+            # 计算优化后的各发电设备出力和负荷（包含厂用电负荷的迭代计算）
+            try:
+                # 计算优化后的光伏出力、风机出力、调峰机组出力、总负荷等
+                optimized_pv_output = []
+                optimized_wind_output = []
+                optimized_peak_output = []
+                optimized_grid_load = []
+                optimized_internal_load = []
+                optimized_total_load = []
+            
+                for idx, i in enumerate(hours):
+                    # 使用迭代方法计算优化后的厂用电负荷和总负荷
+                    basic_load = optimized_basic_load[idx]
+                    flexible_load = optimized_flexible_load[idx]
+                    initial_total_load = basic_load + flexible_load
+                    
+                    # 使用平衡计算中的迭代方法
+                    max_iterations = 10  # 最大迭代次数
+                    tolerance = 1e-6     # 收敛阈值
+                    
+                    # 初始化厂用电负荷和总负荷
+                    internal_electric_load = initial_total_load * self.data_model.internal_electric_rate
+                    total_load = initial_total_load + internal_electric_load
                 
                 # 获取当前小时的气象数据
                 solar_irradiance = self.data_model.solar_irradiance_hourly[i]
@@ -5642,18 +5641,18 @@ class EnergyBalanceApp:
                 optimized_grid_load.append(grid_load)
                 optimized_internal_load.append(internal_electric_load)
                 optimized_total_load.append(total_load)
-                
-        except Exception as e:
-            print(f"计算优化后发电出力时出错: {e}")
-            # 如果计算出错，使用原始的发电出力数据
-            optimized_pv_output = [self.results['hourly_pv_output'][i] for i in hours]
-            optimized_wind_output = [self.results['hourly_wind_output'][i] for i in hours]
-            optimized_peak_output = [self.results['hourly_peak_output'][i] for i in hours]
-            optimized_grid_load = [self.results['hourly_grid_load'][i] for i in hours]
-        
-        # 将小时转换为日期格式（从2025-01-01开始）
-        from datetime import datetime, timedelta
-        dates = [datetime(2025, 1, 1) + timedelta(hours=h) for h in hours]
+                            
+            except Exception as e:
+                print(f"计算优化后发电出力时出错：{e}")
+                # 如果计算出错，使用原始的发电出力数据
+                optimized_pv_output = [self.results['hourly_pv_output'][i] for i in hours]
+                optimized_wind_output = [self.results['hourly_wind_output'][i] for i in hours]
+                optimized_peak_output = [self.results['hourly_peak_output'][i] for i in hours]
+                optimized_grid_load = [self.results['hourly_grid_load'][i] for i in hours]
+                    
+            # 将小时转换为日期格式（从 2025-01-01 开始）
+            from datetime import datetime, timedelta
+            dates = [datetime(2025, 1, 1) + timedelta(hours=h) for h in hours]
         
         # 绘制优化后的发电出力图
         line_opt_basic, = self.optimization_ax.plot(dates, optimized_basic_load, label='基础负荷(优化后)', linewidth=0.8, color='blue', linestyle='-')
