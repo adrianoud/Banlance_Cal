@@ -19,6 +19,12 @@ except ImportError:
     start_cost_optimization = None
     export_cost_optimization_results = None
 
+# 导入成本详细分析模块
+try:
+    from detailed_cost_analysis import DetailedCostAnalyzer
+except ImportError:
+    DetailedCostAnalyzer = None
+
 
 # 尝试导入openpyxl用于Excel导出1
 try:
@@ -4552,6 +4558,10 @@ class EnergyBalanceApp:
         top_button_frame = ttk.Frame(tab)
         top_button_frame.grid(row=0, column=0, sticky=tk.E, padx=5, pady=5)
         
+        # 添加刷新数据按钮
+        refresh_btn = ttk.Button(top_button_frame, text="🔄 刷新成本数据", command=self.update_detailed_cost_analysis)
+        refresh_btn.pack(side=tk.RIGHT, padx=5)
+        
         # 添加保存按钮
         save_btn = ttk.Button(top_button_frame, text="💾 保存成本参数", command=self.save_detailed_cost_parameters)
         save_btn.pack(side=tk.RIGHT, padx=5)
@@ -4783,6 +4793,101 @@ class EnergyBalanceApp:
         
         for item, value in summary_data:
             self.detailed_summary_tree.insert('', tk.END, values=(item, value))
+    
+    def update_detailed_cost_analysis(self):
+        """
+        更新成本详细分析结果
+        """
+        try:
+            # 检查是否有计算结果
+            if not self.results:
+                messagebox.showwarning("警告", "请先进行年度平衡计算！")
+                return
+            
+            # 创建成本详细分析器
+            if DetailedCostAnalyzer is None:
+                messagebox.showerror("错误", "成本详细分析模块未导入！")
+                return
+            
+            analyzer = DetailedCostAnalyzer(self.data_model, self.results)
+            
+            # 计算各项成本
+            cost_summary = analyzer.calculate_total_summary()
+            
+            # 清空现有数据
+            for item in self.detailed_summary_tree.get_children():
+                self.detailed_summary_tree.delete(item)
+            
+            # 准备汇总数据
+            summary_data = [
+                ('年度总成本', f"{cost_summary['total_cost']:.2f} 万元"),
+                ('火电总成本', f"{cost_summary['thermal']['total_cost']:.2f} 万元"),
+                ('光伏总成本', f"{cost_summary['pv']['total_cost']:.2f} 万元"),
+                ('风电总成本', f"{cost_summary['wind']['total_cost']:.2f} 万元"),
+                ('下网总成本', f"{cost_summary['grid']['total_cost']:.2f} 万元"),
+                ('其他总成本', f"{cost_summary['other']['total_cost']:.2f} 万元"),
+                ('平均小时成本', f"{cost_summary['avg_hourly_cost']:.2f} 万元"),
+                ('火电总出力', f"{cost_summary['thermal']['total_energy']:.2f} kWh"),
+                ('光伏总出力', f"{cost_summary['pv']['total_energy']:.2f} kWh"),
+                ('风电总出力', f"{cost_summary['wind']['total_energy']:.2f} kWh"),
+                ('下网总负荷', f"{cost_summary['grid']['total_energy']:.2f} kWh"),
+                # 添加度电成本信息
+                ('下网度电成本', f"{cost_summary['grid']['unit_cost']:.4f} 元/kWh"),
+                ('火电度电成本', f"{cost_summary['thermal']['unit_cost']:.4f} 元/kWh"),
+                ('光伏度电成本', f"{cost_summary['pv']['unit_cost']:.4f} 元/kWh"),
+                ('风电度电成本', f"{cost_summary['wind']['unit_cost']:.4f} 元/kWh"),
+            ]
+            
+            for item, value in summary_data:
+                self.detailed_summary_tree.insert('', tk.END, values=(item, value))
+            
+            # 更新图表 - 显示下网负荷趋势
+            self.update_detailed_cost_plot(cost_summary)
+            
+        except Exception as e:
+            import traceback
+            error_msg = f"更新成本详细分析失败：{str(e)}\n{traceback.format_exc()}"
+            print(error_msg)
+            messagebox.showerror("错误", error_msg)
+    
+    def update_detailed_cost_plot(self, cost_summary):
+        """
+        更新成本详细分析图表
+        :param cost_summary: 成本汇总数据
+        """
+        try:
+            self.detailed_cost_ax.clear()
+            
+            # 获取下网负荷数据
+            if 'hourly_grid_load' in self.results:
+                grid_load = self.results['hourly_grid_load']
+                hours = range(len(grid_load))
+                
+                # 绘制下网负荷趋势图
+                self.detailed_cost_ax.plot(hours, grid_load, label='下网负荷', linewidth=1, color='blue')
+                
+                # 设置标签和标题
+                self.detailed_cost_ax.set_xlabel('小时', fontsize=12)
+                self.detailed_cost_ax.set_ylabel('下网负荷 (kW)', fontsize=12)
+                self.detailed_cost_ax.set_title('8760 小时下网负荷趋势', fontsize=14)
+                self.detailed_cost_ax.legend(loc='best')
+                self.detailed_cost_ax.grid(True, alpha=0.3)
+                
+                # 调整布局
+                self.detailed_cost_figure.tight_layout()
+                
+                # 刷新画布
+                self.detailed_cost_canvas.draw()
+            else:
+                # 如果没有数据，显示提示信息
+                self.detailed_cost_ax.text(0.5, 0.5, '暂无下网负荷数据', 
+                                         horizontalalignment='center', verticalalignment='center',
+                                         transform=self.detailed_cost_ax.transAxes, fontsize=12)
+                self.detailed_cost_ax.set_title('8760 小时下网负荷趋势')
+                self.detailed_cost_canvas.draw()
+                
+        except Exception as e:
+            print(f"更新成本详细分析图表失败：{str(e)}")
     
     def init_thermal_coal_curve(self):
         """
