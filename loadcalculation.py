@@ -4530,9 +4530,9 @@ class EnergyBalanceApp:
         top_input_frame = ttk.Frame(tab)
         top_input_frame.grid(row=1, column=0, sticky=(tk.W, tk.E), pady=(0, 10))
         
-        # 左半部分：下网成本、光伏成本、风电成本、其他成本
+        # 第 1 列：下网成本、光伏成本、风电成本、其他成本
         left_input_frame = ttk.LabelFrame(top_input_frame, text="成本输入", padding="10")
-        left_input_frame.grid(row=0, column=0, sticky=(tk.W, tk.E), padx=(0, 5))
+        left_input_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(0, 5))
         
         # 创建网格布局：2 列，每行放置不同的成本项
         row_idx = 0
@@ -4585,64 +4585,95 @@ class EnergyBalanceApp:
         self.detailed_other_variable_cost_var = tk.DoubleVar(value=0.0)
         ttk.Entry(other_cost_frame, textvariable=self.detailed_other_variable_cost_var, width=15).grid(row=1, column=1, pady=3, padx=5)
         
-        # 右半部分：火电发电成本输入
-        right_input_frame = ttk.LabelFrame(top_input_frame, text="5. 火电发电成本", padding="10")
-        right_input_frame.grid(row=0, column=1, sticky=(tk.W, tk.E), padx=(5, 0))
+        # 第 2 列：火电发电成本输入
+        middle_input_frame = ttk.LabelFrame(top_input_frame, text="5. 火电发电成本", padding="10")
+        middle_input_frame.grid(row=0, column=1, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(5, 5))
         
         # === 5. 火电发电成本输入 ===
         thermal_row = 0
         
-        ttk.Label(right_input_frame, text="入炉煤综合单价 (元/吨):").grid(row=thermal_row, column=0, sticky=tk.W, pady=3, padx=5)
+        # 新增两项：火电制造成本和火电人工成本
+        ttk.Label(middle_input_frame, text="火电制造成本 (万元):").grid(row=thermal_row, column=0, sticky=tk.W, pady=3, padx=5)
+        self.detailed_thermal_manufacturing_cost_var = tk.DoubleVar(value=19535.0)
+        ttk.Entry(middle_input_frame, textvariable=self.detailed_thermal_manufacturing_cost_var, width=15).grid(row=thermal_row, column=1, pady=3, padx=5)
+        thermal_row += 1
+        
+        ttk.Label(middle_input_frame, text="火电人工成本 (万元):").grid(row=thermal_row, column=0, sticky=tk.W, pady=3, padx=5)
+        self.detailed_thermal_labor_cost_var = tk.DoubleVar(value=4046.0)
+        ttk.Entry(middle_input_frame, textvariable=self.detailed_thermal_labor_cost_var, width=15).grid(row=thermal_row, column=1, pady=3, padx=5)
+        thermal_row += 1
+        
+        # 分隔线
+        ttk.Separator(middle_input_frame, orient='horizontal').grid(row=thermal_row, column=0, columnspan=2, sticky='ew', pady=10)
+        thermal_row += 1
+        
+        ttk.Label(middle_input_frame, text="入炉煤综合单价 (元/吨):").grid(row=thermal_row, column=0, sticky=tk.W, pady=3, padx=5)
         self.detailed_thermal_coal_price_var = tk.DoubleVar(value=162.4)
-        ttk.Entry(right_input_frame, textvariable=self.detailed_thermal_coal_price_var, width=15).grid(row=thermal_row, column=1, pady=3, padx=5)
+        ttk.Entry(middle_input_frame, textvariable=self.detailed_thermal_coal_price_var, width=15).grid(row=thermal_row, column=1, pady=3, padx=5)
         thermal_row += 1
         
-        ttk.Label(right_input_frame, text="火电基准煤耗 (g/kWh):").grid(row=thermal_row, column=0, sticky=tk.W, pady=3, padx=5)
+        ttk.Label(middle_input_frame, text="火电基准煤耗 (g/kWh):").grid(row=thermal_row, column=0, sticky=tk.W, pady=3, padx=5)
         self.detailed_thermal_base_coal_var = tk.DoubleVar(value=500.0)
-        ttk.Entry(right_input_frame, textvariable=self.detailed_thermal_base_coal_var, width=15).grid(row=thermal_row, column=1, pady=3, padx=5)
+        ttk.Entry(middle_input_frame, textvariable=self.detailed_thermal_base_coal_var, width=15).grid(row=thermal_row, column=1, pady=3, padx=5)
         thermal_row += 1
         
-        # 火电煤耗变化曲线（二次函数系数）
-        coal_curve_frame = ttk.LabelFrame(right_input_frame, text="火电煤耗变化曲线", padding="5")
-        coal_curve_frame.grid(row=thermal_row, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=5)
+        # 分隔线
+        ttk.Separator(middle_input_frame, orient='horizontal').grid(row=thermal_row, column=0, columnspan=2, sticky='ew', pady=10)
         thermal_row += 1
         
-        ttk.Label(coal_curve_frame, text="二次项系数:").grid(row=0, column=0, sticky=tk.W, pady=2, padx=3)
-        self.detailed_thermal_coal_quadratic_var = tk.DoubleVar(value=0.0)
-        ttk.Entry(coal_curve_frame, textvariable=self.detailed_thermal_coal_quadratic_var, width=10).grid(row=0, column=1, pady=2, padx=3)
-        
-        ttk.Label(coal_curve_frame, text="一次项系数:").grid(row=0, column=2, sticky=tk.W, pady=2, padx=3)
-        self.detailed_thermal_coal_linear_var = tk.DoubleVar(value=-0.4)
-        ttk.Entry(coal_curve_frame, textvariable=self.detailed_thermal_coal_linear_var, width=10).grid(row=0, column=3, pady=2, padx=3)
-        
-        ttk.Label(coal_curve_frame, text="常数项:").grid(row=0, column=4, sticky=tk.W, pady=2, padx=3)
-        self.detailed_thermal_coal_constant_var = tk.DoubleVar(value=1.4)
-        ttk.Entry(coal_curve_frame, textvariable=self.detailed_thermal_coal_constant_var, width=10).grid(row=0, column=5, pady=2, padx=3)
-        
-        thermal_row += 1
-        
-        ttk.Label(right_input_frame, text="碳排放分配系数:").grid(row=thermal_row, column=0, sticky=tk.W, pady=3, padx=5)
+        ttk.Label(middle_input_frame, text="碳排放分配系数:").grid(row=thermal_row, column=0, sticky=tk.W, pady=3, padx=5)
         self.detailed_thermal_carbon_alloc_var = tk.DoubleVar(value=0.8049)
-        ttk.Entry(right_input_frame, textvariable=self.detailed_thermal_carbon_alloc_var, width=15).grid(row=thermal_row, column=1, pady=3, padx=5)
+        ttk.Entry(middle_input_frame, textvariable=self.detailed_thermal_carbon_alloc_var, width=15).grid(row=thermal_row, column=1, pady=3, padx=5)
         thermal_row += 1
         
-        ttk.Label(right_input_frame, text="碳排放单价 (元/吨):").grid(row=thermal_row, column=0, sticky=tk.W, pady=3, padx=5)
+        ttk.Label(middle_input_frame, text="碳排放单价 (元/吨):").grid(row=thermal_row, column=0, sticky=tk.W, pady=3, padx=5)
         self.detailed_thermal_carbon_price_var = tk.DoubleVar(value=80.0)
-        ttk.Entry(right_input_frame, textvariable=self.detailed_thermal_carbon_price_var, width=15).grid(row=thermal_row, column=1, pady=3, padx=5)
+        ttk.Entry(middle_input_frame, textvariable=self.detailed_thermal_carbon_price_var, width=15).grid(row=thermal_row, column=1, pady=3, padx=5)
         thermal_row += 1
         
-        ttk.Label(right_input_frame, text="绿色能源占比:").grid(row=thermal_row, column=0, sticky=tk.W, pady=3, padx=5)
+        ttk.Label(middle_input_frame, text="绿色能源占比:").grid(row=thermal_row, column=0, sticky=tk.W, pady=3, padx=5)
         self.detailed_thermal_green_ratio_var = tk.DoubleVar(value=0.3)
-        ttk.Entry(right_input_frame, textvariable=self.detailed_thermal_green_ratio_var, width=15).grid(row=thermal_row, column=1, pady=3, padx=5)
+        ttk.Entry(middle_input_frame, textvariable=self.detailed_thermal_green_ratio_var, width=15).grid(row=thermal_row, column=1, pady=3, padx=5)
         thermal_row += 1
         
-        ttk.Label(right_input_frame, text="绿证单价 (元/kWh):").grid(row=thermal_row, column=0, sticky=tk.W, pady=3, padx=5)
+        ttk.Label(middle_input_frame, text="绿证单价 (元/kWh):").grid(row=thermal_row, column=0, sticky=tk.W, pady=3, padx=5)
         self.detailed_thermal_green_cert_price_var = tk.DoubleVar(value=0.008)
-        ttk.Entry(right_input_frame, textvariable=self.detailed_thermal_green_cert_price_var, width=15).grid(row=thermal_row, column=1, pady=3, padx=5)
+        ttk.Entry(middle_input_frame, textvariable=self.detailed_thermal_green_cert_price_var, width=15).grid(row=thermal_row, column=1, pady=3, padx=5)
+        
+        # 第 3 列：火电煤耗变化曲线
+        right_input_frame = ttk.LabelFrame(top_input_frame, text="6. 火电煤耗变化曲线", padding="10")
+        right_input_frame.grid(row=0, column=2, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(5, 0))
+        
+        # 曲线系数输入
+        curve_params_frame = ttk.Frame(right_input_frame)
+        curve_params_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        ttk.Label(curve_params_frame, text="二次项系数:").grid(row=0, column=0, sticky=tk.W, pady=3, padx=5)
+        self.detailed_thermal_coal_quadratic_var = tk.DoubleVar(value=0.0)
+        ttk.Entry(curve_params_frame, textvariable=self.detailed_thermal_coal_quadratic_var, width=10).grid(row=0, column=1, pady=3, padx=5)
+        
+        ttk.Label(curve_params_frame, text="一次项系数:").grid(row=1, column=0, sticky=tk.W, pady=3, padx=5)
+        self.detailed_thermal_coal_linear_var = tk.DoubleVar(value=-0.4)
+        ttk.Entry(curve_params_frame, textvariable=self.detailed_thermal_coal_linear_var, width=10).grid(row=1, column=1, pady=3, padx=5)
+        
+        ttk.Label(curve_params_frame, text="常数项:").grid(row=2, column=0, sticky=tk.W, pady=3, padx=5)
+        self.detailed_thermal_coal_constant_var = tk.DoubleVar(value=1.4)
+        ttk.Entry(curve_params_frame, textvariable=self.detailed_thermal_coal_constant_var, width=10).grid(row=2, column=1, pady=3, padx=5)
+        
+        # 曲线图表
+        self.detailed_thermal_coal_curve_figure = Figure(figsize=(5, 4), dpi=100)
+        self.detailed_thermal_coal_curve_ax = self.detailed_thermal_coal_curve_figure.add_subplot(111)
+        self.detailed_thermal_coal_curve_canvas = FigureCanvasTkAgg(self.detailed_thermal_coal_curve_figure, right_input_frame)
+        self.detailed_thermal_coal_curve_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+        
+        # 初始化曲线显示
+        self.init_thermal_coal_curve()
         
         # 配置权重
         top_input_frame.columnconfigure(0, weight=1)
         top_input_frame.columnconfigure(1, weight=1)
+        top_input_frame.columnconfigure(2, weight=1)
+        top_input_frame.rowconfigure(0, weight=1)
         
         # ===== 下方结果展示区域 =====
         bottom_result_frame = ttk.Frame(tab)
@@ -4718,6 +4749,47 @@ class EnergyBalanceApp:
         
         for item, value in summary_data:
             self.detailed_summary_tree.insert('', tk.END, values=(item, value))
+    
+    def init_thermal_coal_curve(self):
+        """
+        初始化火电煤耗变化曲线图表
+        """
+        self.detailed_thermal_coal_curve_ax.clear()
+        
+        # 生成相对出力数据 (0-1)
+        relative_output = np.linspace(0, 1, 100)
+        
+        # 计算相对煤耗（二次函数）
+        relative_coal_consumption = (
+            self.detailed_thermal_coal_quadratic_var.get() * relative_output**2 +
+            self.detailed_thermal_coal_linear_var.get() * relative_output +
+            self.detailed_thermal_coal_constant_var.get()
+        )
+        
+        # 绘制曲线
+        self.detailed_thermal_coal_curve_ax.plot(
+            relative_output, 
+            relative_coal_consumption, 
+            label='煤耗变化曲线', 
+            linewidth=2, 
+            color='red'
+        )
+        
+        # 设置标签和标题
+        self.detailed_thermal_coal_curve_ax.set_xlabel('相对出力', fontsize=12)
+        self.detailed_thermal_coal_curve_ax.set_ylabel('相对煤耗', fontsize=12)
+        self.detailed_thermal_coal_curve_ax.set_title('火电煤耗变化曲线', fontsize=14)
+        self.detailed_thermal_coal_curve_ax.legend(loc='best')
+        self.detailed_thermal_coal_curve_ax.grid(True, alpha=0.3)
+        
+        # 设置 x 轴范围
+        self.detailed_thermal_coal_curve_ax.set_xlim(0, 1)
+        
+        # 调整布局
+        self.detailed_thermal_coal_curve_figure.tight_layout()
+        
+        # 刷新画布
+        self.detailed_thermal_coal_curve_canvas.draw()
     
     def initialize_cost_curves(self):
         """
