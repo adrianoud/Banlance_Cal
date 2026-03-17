@@ -4924,34 +4924,40 @@ class EnergyBalanceApp:
         try:
             self.detailed_cost_ax.clear()
             
-            # 获取下网负荷数据
-            if 'hourly_grid_load' in self.results:
-                grid_load = self.results['hourly_grid_load']
-                hours = range(len(grid_load))
-                
-                # 绘制下网负荷趋势图
-                self.detailed_cost_ax.plot(hours, grid_load, label='下网负荷', linewidth=1, color='blue')
-                
-                # 设置标签和标题
-                self.detailed_cost_ax.set_xlabel('小时', fontsize=12)
-                self.detailed_cost_ax.set_ylabel('下网负荷 (kW)', fontsize=12)
-                self.detailed_cost_ax.set_title('8760 小时下网负荷趋势', fontsize=14)
-                self.detailed_cost_ax.legend(loc='best')
-                self.detailed_cost_ax.grid(True, alpha=0.3)
-                
-                # 调整布局
-                self.detailed_cost_figure.tight_layout()
-                
-                # 刷新画布
-                self.detailed_cost_canvas.draw()
-            else:
-                # 如果没有数据，显示提示信息
-                self.detailed_cost_ax.text(0.5, 0.5, '暂无下网负荷数据', 
-                                         horizontalalignment='center', verticalalignment='center',
-                                         transform=self.detailed_cost_ax.transAxes, fontsize=12)
-                self.detailed_cost_ax.set_title('8760 小时下网负荷趋势')
-                self.detailed_cost_canvas.draw()
-                
+            # 获取各种电源的出力数据
+            thermal_output = self.results.get('hourly_thermal_output', [])
+            pv_output = self.results.get('hourly_pv_output', [])
+            wind_output = self.results.get('hourly_wind_output', [])
+            grid_load = self.results.get('hourly_grid_load', [])
+            
+            hours = range(8760)
+            
+            # 绘制各种电源出力曲线
+            if thermal_output:
+                self.detailed_cost_ax.plot(hours, thermal_output, label='火电出力', linewidth=1.5, color='red', alpha=0.7)
+            
+            if pv_output:
+                self.detailed_cost_ax.plot(hours, pv_output, label='光伏出力', linewidth=1.5, color='orange', alpha=0.7)
+            
+            if wind_output:
+                self.detailed_cost_ax.plot(hours, wind_output, label='风电出力', linewidth=1.5, color='green', alpha=0.7)
+            
+            if grid_load:
+                self.detailed_cost_ax.plot(hours, grid_load, label='下网负荷', linewidth=1.5, color='blue', alpha=0.7)
+            
+            # 设置标签和标题
+            self.detailed_cost_ax.set_xlabel('小时', fontsize=12)
+            self.detailed_cost_ax.set_ylabel('功率 (kW)', fontsize=12)
+            self.detailed_cost_ax.set_title('8760 小时发电出力及下网负荷趋势', fontsize=14)
+            self.detailed_cost_ax.legend(loc='best', fontsize=10)
+            self.detailed_cost_ax.grid(True, alpha=0.3)
+            
+            # 调整布局
+            self.detailed_cost_figure.tight_layout()
+            
+            # 刷新画布
+            self.detailed_cost_canvas.draw()
+            
         except Exception as e:
             print(f"更新成本详细分析图表失败：{str(e)}")
     
