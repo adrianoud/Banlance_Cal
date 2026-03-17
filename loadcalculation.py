@@ -5096,6 +5096,9 @@ class EnergyBalanceApp:
             # 保存项目数据
             self.save_current_project()
             
+            # 更新煤耗曲线图表
+            self.init_thermal_coal_curve()
+            
             messagebox.showinfo("成功", "成本详细分析参数已保存！")
             
         except Exception as e:
