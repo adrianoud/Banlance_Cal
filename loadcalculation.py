@@ -4818,13 +4818,15 @@ class EnergyBalanceApp:
         right_summary_frame = ttk.LabelFrame(bottom_result_frame, text="年度汇总", padding="10")
         right_summary_frame.grid(row=0, column=1, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(5, 0))
         
-        # 年度汇总表格
-        columns = ('项目', '数值')
+        # 年度汇总表格 - 三列：项目、基于投资成本、基于度电价格
+        columns = ('项目', '基于投资成本', '基于度电价格')
         self.detailed_summary_tree = ttk.Treeview(right_summary_frame, columns=columns, show='headings', height=15)
         self.detailed_summary_tree.heading('项目', text='项目')
-        self.detailed_summary_tree.heading('数值', text='数值')
-        self.detailed_summary_tree.column('项目', width=150)
-        self.detailed_summary_tree.column('数值', width=150)
+        self.detailed_summary_tree.heading('基于投资成本', text='基于投资成本')
+        self.detailed_summary_tree.heading('基于度电价格', text='基于度电价格')
+        self.detailed_summary_tree.column('项目', width=120)
+        self.detailed_summary_tree.column('基于投资成本', width=120)
+        self.detailed_summary_tree.column('基于度电价格', width=120)
         
         # 添加滚动条
         summary_scrollbar = ttk.Scrollbar(right_summary_frame, orient=tk.VERTICAL, command=self.detailed_summary_tree.yview)
@@ -4859,17 +4861,19 @@ class EnergyBalanceApp:
         
         # 添加初始汇总数据
         summary_data = [
-            ('年度总成本', '0.00 元'),
-            ('火电总成本', '0.00 元'),
-            ('光伏总成本', '0.00 元'),
-            ('风电总成本', '0.00 元'),
-            ('下网总成本', '0.00 元'),
-            ('其他总成本', '0.00 元'),
-            ('平均小时成本', '0.00 元'),
-            ('火电总出力', '0.00 kWh'),
-            ('光伏总出力', '0.00 kWh'),
-            ('风电总出力', '0.00 kWh'),
-            ('下网总负荷', '0.00 kWh'),
+            ('年度总成本', '0.00 万元', '-'),
+            ('火电总成本', '0.00 万元', '-'),
+            ('光伏总成本', '0.00 万元', '0.00 万元'),
+            ('风电总成本', '0.00 万元', '0.00 万元'),
+            ('下网总成本', '0.00 万元', '-'),
+            ('其他总成本', '0.00 万元', '-'),
+            ('平均小时成本', '0.00 万元', '-'),
+            ('火电总出力', '0.00 kWh', '-'),
+            ('光伏总出力', '0.00 kWh', '0.00 kWh'),
+            ('风电总出力', '0.00 kWh', '0.00 kWh'),
+            ('下网总负荷', '0.00 kWh', '-'),
+            ('光伏度电成本', '0.0000 元/kWh', '0.0000 元/kWh'),
+            ('风电度电成本', '0.0000 元/kWh', '0.0000 元/kWh'),
         ]
         
         for item, value in summary_data:
@@ -4899,28 +4903,28 @@ class EnergyBalanceApp:
             for item in self.detailed_summary_tree.get_children():
                 self.detailed_summary_tree.delete(item)
             
-            # 准备汇总数据
+            # 准备汇总数据 - 三列显示
             summary_data = [
-                ('年度总成本', f"{cost_summary['total_cost']:.2f} 万元"),
-                ('火电总成本', f"{cost_summary['thermal']['total_cost']:.2f} 万元"),
-                ('光伏总成本', f"{cost_summary['pv']['total_cost']:.2f} 万元"),
-                ('风电总成本', f"{cost_summary['wind']['total_cost']:.2f} 万元"),
-                ('下网总成本', f"{cost_summary['grid']['total_cost']:.2f} 万元"),
-                ('其他总成本', f"{cost_summary['other']['total_cost']:.2f} 万元"),
-                ('平均小时成本', f"{cost_summary['avg_hourly_cost']:.2f} 万元"),
-                ('火电总出力', f"{cost_summary['thermal']['total_energy']:.2f} kWh"),
-                ('光伏总出力', f"{cost_summary['pv']['total_energy']:.2f} kWh"),
-                ('风电总出力', f"{cost_summary['wind']['total_energy']:.2f} kWh"),
-                ('下网总负荷', f"{cost_summary['grid']['total_energy']:.2f} kWh"),
+                ('年度总成本', f"{cost_summary['total_cost']:.2f} 万元", '-'),
+                ('火电总成本', f"{cost_summary['thermal']['total_cost']:.2f} 万元", '-'),
+                ('光伏总成本', f"{cost_summary['pv']['total_cost']:.2f} 万元", f"{cost_summary['pv']['total_cost_by_unit_price']:.2f} 万元"),
+                ('风电总成本', f"{cost_summary['wind']['total_cost']:.2f} 万元", f"{cost_summary['wind']['total_cost_by_unit_price']:.2f} 万元"),
+                ('下网总成本', f"{cost_summary['grid']['total_cost']:.2f} 万元", '-'),
+                ('其他总成本', f"{cost_summary['other']['total_cost']:.2f} 万元", '-'),
+                ('平均小时成本', f"{cost_summary['avg_hourly_cost']:.2f} 万元", '-'),
+                ('火电总出力', f"{cost_summary['thermal']['total_energy']:.2f} kWh", '-'),
+                ('光伏总出力', f"{cost_summary['pv']['total_energy']:.2f} kWh", f"{cost_summary['pv']['total_energy']:.2f} kWh"),
+                ('风电总出力', f"{cost_summary['wind']['total_energy']:.2f} kWh", f"{cost_summary['wind']['total_energy']:.2f} kWh"),
+                ('下网总负荷', f"{cost_summary['grid']['total_energy']:.2f} kWh", '-'),
                 # 添加度电成本信息
-                ('下网度电成本', f"{cost_summary['grid']['unit_cost']:.4f} 元/kWh"),
-                ('火电度电成本', f"{cost_summary['thermal']['unit_cost']:.4f} 元/kWh"),
-                ('光伏度电成本', f"{cost_summary['pv']['unit_cost']:.4f} 元/kWh"),
-                ('风电度电成本', f"{cost_summary['wind']['unit_cost']:.4f} 元/kWh"),
+                ('下网度电成本', f"{cost_summary['grid']['unit_cost']:.4f} 元/kWh", '-'),
+                ('火电度电成本', f"{cost_summary['thermal']['unit_cost']:.4f} 元/kWh", '-'),
+                ('光伏度电成本', f"{cost_summary['pv']['unit_cost']:.4f} 元/kWh", f"{cost_summary['pv']['unit_cost_by_unit_price']:.4f} 元/kWh"),
+                ('风电度电成本', f"{cost_summary['wind']['unit_cost']:.4f} 元/kWh", f"{cost_summary['wind']['unit_cost_by_unit_price']:.4f} 元/kWh"),
             ]
             
-            for item, value in summary_data:
-                self.detailed_summary_tree.insert('', tk.END, values=(item, value))
+            for item, value1, value2 in summary_data:
+                self.detailed_summary_tree.insert('', tk.END, values=(item, value1, value2))
             
             # 更新图表 - 显示下网负荷趋势
             self.update_detailed_cost_plot(cost_summary)

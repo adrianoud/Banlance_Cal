@@ -93,6 +93,7 @@ class DetailedCostAnalyzer:
         # 获取页面输入的光伏成本参数
         pv_depreciation = self.data_model.detailed_cost_params.get('pv_depreciation', 14000.0)  # 万元
         pv_backup_fee = self.data_model.detailed_cost_params.get('pv_backup_fee', 0.069)  # 元/kWh
+        pv_unit_price = self.data_model.detailed_cost_params.get('pv_unit_price', 0.3)  # 元/kWh
         
         # 获取平衡计算结果中的每小时光伏出力（kW）
         if 'hourly_pv_output' in self.results:
@@ -101,14 +102,15 @@ class DetailedCostAnalyzer:
             return {
                 'total_cost': pv_depreciation,
                 'unit_cost': 0.0,
-                'total_energy': 0.0
+                'total_energy': 0.0,
+                'total_cost_by_unit_price': 0.0,
+                'unit_cost_by_unit_price': 0.0
             }
         
         # 计算光伏总出力（kWh）
         total_pv_energy_kwh = np.sum(pv_output_hourly)
         
-        # 光伏总成本 = 折旧成本 + 备份费和政府基金
-        # 备份费和政府基金 = 总电量 × 单价
+        # 方法 1：光伏总成本 = 折旧成本 + 备份费和政府基金
         backup_fee_total_wan = total_pv_energy_kwh * pv_backup_fee / 10000.0  # 转换为万元
         total_pv_cost_wan = pv_depreciation + backup_fee_total_wan
         
@@ -118,10 +120,20 @@ class DetailedCostAnalyzer:
         else:
             unit_cost_yuan_kwh = 0.0
         
+        # 方法 2：基于度电价格的成本计算（不考虑折旧）
+        # 总成本 = (度电价格 + 备份费和政府基金) × 总发电量
+        total_pv_cost_by_unit_price_wan = total_pv_energy_kwh * (pv_unit_price + pv_backup_fee) / 10000.0  # 万元
+        if total_pv_energy_kwh > 0:
+            unit_cost_by_unit_price_yuan_kwh = (pv_unit_price + pv_backup_fee)
+        else:
+            unit_cost_by_unit_price_yuan_kwh = 0.0
+        
         return {
-            'total_cost': total_pv_cost_wan,  # 万元
-            'unit_cost': unit_cost_yuan_kwh,  # 元/kWh
-            'total_energy': total_pv_energy_kwh  # kWh
+            'total_cost': total_pv_cost_wan,  # 万元（基于投资成本）
+            'unit_cost': unit_cost_yuan_kwh,  # 元/kWh（基于投资成本）
+            'total_energy': total_pv_energy_kwh,  # kWh
+            'total_cost_by_unit_price': total_pv_cost_by_unit_price_wan,  # 万元（基于度电价格）
+            'unit_cost_by_unit_price': unit_cost_by_unit_price_yuan_kwh  # 元/kWh（基于度电价格）
         }
     
     def calculate_wind_cost(self):
@@ -132,6 +144,7 @@ class DetailedCostAnalyzer:
         # 获取页面输入的风电成本参数
         wind_depreciation = self.data_model.detailed_cost_params.get('wind_depreciation', 10000.0)  # 万元
         wind_backup_fee = self.data_model.detailed_cost_params.get('wind_backup_fee', 0.05)  # 元/kWh
+        wind_unit_price = self.data_model.detailed_cost_params.get('wind_unit_price', 0.3)  # 元/kWh
         
         # 获取平衡计算结果中的每小时风电出力（kW）
         if 'hourly_wind_output' in self.results:
@@ -140,13 +153,15 @@ class DetailedCostAnalyzer:
             return {
                 'total_cost': wind_depreciation,
                 'unit_cost': 0.0,
-                'total_energy': 0.0
+                'total_energy': 0.0,
+                'total_cost_by_unit_price': 0.0,
+                'unit_cost_by_unit_price': 0.0
             }
         
         # 计算风电总出力（kWh）
         total_wind_energy_kwh = np.sum(wind_output_hourly)
         
-        # 风电总成本 = 折旧成本 + 备份费和政府基金
+        # 方法 1：风电总成本 = 折旧成本 + 备份费和政府基金
         backup_fee_total_wan = total_wind_energy_kwh * wind_backup_fee / 10000.0  # 转换为万元
         total_wind_cost_wan = wind_depreciation + backup_fee_total_wan
         
@@ -156,10 +171,20 @@ class DetailedCostAnalyzer:
         else:
             unit_cost_yuan_kwh = 0.0
         
+        # 方法 2：基于度电价格的成本计算（不考虑折旧）
+        # 总成本 = (度电价格 + 备份费和政府基金) × 总发电量
+        total_wind_cost_by_unit_price_wan = total_wind_energy_kwh * (wind_unit_price + wind_backup_fee) / 10000.0  # 万元
+        if total_wind_energy_kwh > 0:
+            unit_cost_by_unit_price_yuan_kwh = (wind_unit_price + wind_backup_fee)
+        else:
+            unit_cost_by_unit_price_yuan_kwh = 0.0
+        
         return {
-            'total_cost': total_wind_cost_wan,  # 万元
-            'unit_cost': unit_cost_yuan_kwh,  # 元/kWh
-            'total_energy': total_wind_energy_kwh  # kWh
+            'total_cost': total_wind_cost_wan,  # 万元（基于投资成本）
+            'unit_cost': unit_cost_yuan_kwh,  # 元/kWh（基于投资成本）
+            'total_energy': total_wind_energy_kwh,  # kWh
+            'total_cost_by_unit_price': total_wind_cost_by_unit_price_wan,  # 万元（基于度电价格）
+            'unit_cost_by_unit_price': unit_cost_by_unit_price_yuan_kwh  # 元/kWh（基于度电价格）
         }
     
     def calculate_thermal_cost(self):
