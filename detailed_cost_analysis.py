@@ -385,21 +385,32 @@ class DetailedCostAnalyzer:
         thermal_cost = self.calculate_thermal_cost()
         other_cost = self.calculate_other_cost()
         
-        # 计算总成本（万元）
+        # 计算总成本（万元）- 基于投资成本
         total_cost_wan = (grid_cost['total_cost'] + pv_cost['total_cost'] + 
                          wind_cost['total_cost'] + thermal_cost['total_cost'] + 
                          other_cost['total_cost'])
+        
+        # 计算总成本（万元）- 基于度电价格
+        # 只有光伏和风电使用度电价格算法，其他保持不变
+        total_cost_by_unit_price_wan = (grid_cost['total_cost'] + pv_cost['total_cost_by_unit_price'] + 
+                                       wind_cost['total_cost_by_unit_price'] + thermal_cost['total_cost'] + 
+                                       other_cost['total_cost'])
         
         # 计算总发电量（kWh）
         total_generation_kwh = (pv_cost['total_energy'] + wind_cost['total_energy'] + 
                                thermal_cost['total_energy'])
         
-        # 计算平均小时成本
+        # 计算平均小时成本 - 基于投资成本
         avg_hourly_cost_wan = total_cost_wan / 8760.0
+        
+        # 计算平均小时成本 - 基于度电价格
+        avg_hourly_cost_by_unit_price_wan = total_cost_by_unit_price_wan / 8760.0
         
         return {
             'total_cost': total_cost_wan,
+            'total_cost_by_unit_price': total_cost_by_unit_price_wan,
             'avg_hourly_cost': avg_hourly_cost_wan,
+            'avg_hourly_cost_by_unit_price': avg_hourly_cost_by_unit_price_wan,
             'total_generation': total_generation_kwh,
             'grid': grid_cost,
             'pv': pv_cost,

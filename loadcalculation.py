@@ -4861,17 +4861,17 @@ class EnergyBalanceApp:
         
         # 添加初始汇总数据
         summary_data = [
-            ('年度总成本', '0.00 万元', '-'),
-            ('火电总成本', '0.00 万元', '-'),
+            ('年度总成本', '0.00 万元', '0.00 万元'),
+            ('火电总成本', '0.00 万元', '0.00 万元'),
             ('光伏总成本', '0.00 万元', '0.00 万元'),
             ('风电总成本', '0.00 万元', '0.00 万元'),
-            ('下网总成本', '0.00 万元', '-'),
-            ('其他总成本', '0.00 万元', '-'),
-            ('平均小时成本', '0.00 万元', '-'),
-            ('火电总出力', '0.00 kWh', '-'),
+            ('下网总成本', '0.00 万元', '0.00 万元'),
+            ('其他总成本', '0.00 万元', '0.00 万元'),
+            ('平均小时成本', '0.00 万元', '0.00 万元'),
+            ('火电总出力', '0.00 kWh', '0.00 kWh'),
             ('光伏总出力', '0.00 kWh', '0.00 kWh'),
             ('风电总出力', '0.00 kWh', '0.00 kWh'),
-            ('下网总负荷', '0.00 kWh', '-'),
+            ('下网总负荷', '0.00 kWh', '0.00 kWh'),
             ('光伏度电成本', '0.0000 元/kWh', '0.0000 元/kWh'),
             ('风电度电成本', '0.0000 元/kWh', '0.0000 元/kWh'),
         ]
@@ -4905,20 +4905,20 @@ class EnergyBalanceApp:
             
             # 准备汇总数据 - 三列显示
             summary_data = [
-                ('年度总成本', f"{cost_summary['total_cost']:.2f} 万元", '-'),
-                ('火电总成本', f"{cost_summary['thermal']['total_cost']:.2f} 万元", '-'),
+                ('年度总成本', f"{cost_summary['total_cost']:.2f} 万元", f"{cost_summary['total_cost_by_unit_price']:.2f} 万元"),
+                ('火电总成本', f"{cost_summary['thermal']['total_cost']:.2f} 万元", f"{cost_summary['thermal']['total_cost']:.2f} 万元"),
                 ('光伏总成本', f"{cost_summary['pv']['total_cost']:.2f} 万元", f"{cost_summary['pv']['total_cost_by_unit_price']:.2f} 万元"),
                 ('风电总成本', f"{cost_summary['wind']['total_cost']:.2f} 万元", f"{cost_summary['wind']['total_cost_by_unit_price']:.2f} 万元"),
-                ('下网总成本', f"{cost_summary['grid']['total_cost']:.2f} 万元", '-'),
-                ('其他总成本', f"{cost_summary['other']['total_cost']:.2f} 万元", '-'),
-                ('平均小时成本', f"{cost_summary['avg_hourly_cost']:.2f} 万元", '-'),
-                ('火电总出力', f"{cost_summary['thermal']['total_energy']:.2f} kWh", '-'),
+                ('下网总成本', f"{cost_summary['grid']['total_cost']:.2f} 万元", f"{cost_summary['grid']['total_cost']:.2f} 万元"),
+                ('其他总成本', f"{cost_summary['other']['total_cost']:.2f} 万元", f"{cost_summary['other']['total_cost']:.2f} 万元"),
+                ('平均小时成本', f"{cost_summary['avg_hourly_cost']:.2f} 万元", f"{cost_summary['avg_hourly_cost_by_unit_price']:.2f} 万元"),
+                ('火电总出力', f"{cost_summary['thermal']['total_energy']:.2f} kWh", f"{cost_summary['thermal']['total_energy']:.2f} kWh"),
                 ('光伏总出力', f"{cost_summary['pv']['total_energy']:.2f} kWh", f"{cost_summary['pv']['total_energy']:.2f} kWh"),
                 ('风电总出力', f"{cost_summary['wind']['total_energy']:.2f} kWh", f"{cost_summary['wind']['total_energy']:.2f} kWh"),
-                ('下网总负荷', f"{cost_summary['grid']['total_energy']:.2f} kWh", '-'),
+                ('下网总负荷', f"{cost_summary['grid']['total_energy']:.2f} kWh", f"{cost_summary['grid']['total_energy']:.2f} kWh"),
                 # 添加度电成本信息
-                ('下网度电成本', f"{cost_summary['grid']['unit_cost']:.4f} 元/kWh", '-'),
-                ('火电度电成本', f"{cost_summary['thermal']['unit_cost']:.4f} 元/kWh", '-'),
+                ('下网度电成本', f"{cost_summary['grid']['unit_cost']:.4f} 元/kWh", f"{cost_summary['grid']['unit_cost']:.4f} 元/kWh"),
+                ('火电度电成本', f"{cost_summary['thermal']['unit_cost']:.4f} 元/kWh", f"{cost_summary['thermal']['unit_cost']:.4f} 元/kWh"),
                 ('光伏度电成本', f"{cost_summary['pv']['unit_cost']:.4f} 元/kWh", f"{cost_summary['pv']['unit_cost_by_unit_price']:.4f} 元/kWh"),
                 ('风电度电成本', f"{cost_summary['wind']['unit_cost']:.4f} 元/kWh", f"{cost_summary['wind']['unit_cost_by_unit_price']:.4f} 元/kWh"),
             ]
