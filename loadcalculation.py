@@ -4583,7 +4583,7 @@ class EnergyBalanceApp:
         top_input_frame = ttk.Frame(tab)
         top_input_frame.grid(row=1, column=0, sticky=(tk.W, tk.E), pady=(0, 10))
         
-        # 第 1 列：下网成本、光伏成本、风电成本、其他成本
+        # 第 1 列：下网成本、其他成本
         left_input_frame = ttk.LabelFrame(top_input_frame, text="成本输入", padding="10")
         left_input_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(0, 5))
         
@@ -4616,33 +4616,7 @@ class EnergyBalanceApp:
         self.detailed_grid_government_fund_var = tk.DoubleVar(value=0.0041)
         ttk.Entry(grid_price_frame, textvariable=self.detailed_grid_government_fund_var, width=15).grid(row=4, column=1, pady=3, padx=5)
         
-        # === 2. 光伏成本输入 ===
-        pv_cost_frame = ttk.LabelFrame(left_input_frame, text="2. 光伏成本", padding="8")
-        pv_cost_frame.grid(row=row_idx, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=5)
-        row_idx += 1
-        
-        ttk.Label(pv_cost_frame, text="投资年度折旧 (万元):").grid(row=0, column=0, sticky=tk.W, pady=3, padx=5)
-        self.detailed_pv_depreciation_var = tk.DoubleVar(value=14000.0)
-        ttk.Entry(pv_cost_frame, textvariable=self.detailed_pv_depreciation_var, width=15).grid(row=0, column=1, pady=3, padx=5)
-        
-        ttk.Label(pv_cost_frame, text="备份费和政府基金 (元/kWh):").grid(row=1, column=0, sticky=tk.W, pady=3, padx=5)
-        self.detailed_pv_backup_fee_var = tk.DoubleVar(value=0.069)
-        ttk.Entry(pv_cost_frame, textvariable=self.detailed_pv_backup_fee_var, width=15).grid(row=1, column=1, pady=3, padx=5)
-        
-        # === 3. 风电成本输入 ===
-        wind_cost_frame = ttk.LabelFrame(left_input_frame, text="3. 风电成本", padding="8")
-        wind_cost_frame.grid(row=row_idx, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=5)
-        row_idx += 1
-        
-        ttk.Label(wind_cost_frame, text="投资年度折旧 (万元):").grid(row=0, column=0, sticky=tk.W, pady=3, padx=5)
-        self.detailed_wind_depreciation_var = tk.DoubleVar(value=10000.0)
-        ttk.Entry(wind_cost_frame, textvariable=self.detailed_wind_depreciation_var, width=15).grid(row=0, column=1, pady=3, padx=5)
-        
-        ttk.Label(wind_cost_frame, text="备份费和政府基金 (元/kWh):").grid(row=1, column=0, sticky=tk.W, pady=3, padx=5)
-        self.detailed_wind_backup_fee_var = tk.DoubleVar(value=0.05)
-        ttk.Entry(wind_cost_frame, textvariable=self.detailed_wind_backup_fee_var, width=15).grid(row=1, column=1, pady=3, padx=5)
-        
-        # === 4. 其他成本输入 ===
+        # === 2. 其他成本输入 ===
         other_cost_frame = ttk.LabelFrame(left_input_frame, text="4. 其他成本", padding="8")
         other_cost_frame.grid(row=row_idx, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=5)
         row_idx += 1
@@ -4655,46 +4629,86 @@ class EnergyBalanceApp:
         self.detailed_other_variable_cost_var = tk.DoubleVar(value=0.0)
         ttk.Entry(other_cost_frame, textvariable=self.detailed_other_variable_cost_var, width=15).grid(row=1, column=1, pady=3, padx=5)
         
-        # 第 2 列：火电成本输入
-        middle_input_frame = ttk.LabelFrame(top_input_frame, text="5. 火电成本", padding="10")
-        middle_input_frame.grid(row=0, column=1, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(5, 5))
+        # 第 2 列：光伏成本、风电成本
+        middle_left_input_frame = ttk.LabelFrame(top_input_frame, text="新能源成本", padding="10")
+        middle_left_input_frame.grid(row=0, column=1, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(5, 5))
+        
+        ml_row_idx = 0
+        
+        # === 2. 光伏成本输入 ===
+        pv_cost_frame = ttk.LabelFrame(middle_left_input_frame, text="2. 光伏成本", padding="8")
+        pv_cost_frame.grid(row=ml_row_idx, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=5)
+        ml_row_idx += 1
+        
+        ttk.Label(pv_cost_frame, text="投资年度折旧 (万元):").grid(row=0, column=0, sticky=tk.W, pady=3, padx=5)
+        self.detailed_pv_depreciation_var = tk.DoubleVar(value=14000.0)
+        ttk.Entry(pv_cost_frame, textvariable=self.detailed_pv_depreciation_var, width=15).grid(row=0, column=1, pady=3, padx=5)
+        
+        ttk.Label(pv_cost_frame, text="备份费和政府基金 (元/kWh):").grid(row=1, column=0, sticky=tk.W, pady=3, padx=5)
+        self.detailed_pv_backup_fee_var = tk.DoubleVar(value=0.069)
+        ttk.Entry(pv_cost_frame, textvariable=self.detailed_pv_backup_fee_var, width=15).grid(row=1, column=1, pady=3, padx=5)
+        
+        ttk.Label(pv_cost_frame, text="度电价格 (元/kWh):").grid(row=2, column=0, sticky=tk.W, pady=3, padx=5)
+        self.detailed_pv_unit_price_var = tk.DoubleVar(value=0.3)
+        ttk.Entry(pv_cost_frame, textvariable=self.detailed_pv_unit_price_var, width=15).grid(row=2, column=1, pady=3, padx=5)
+        
+        # === 3. 风电成本输入 ===
+        wind_cost_frame = ttk.LabelFrame(middle_left_input_frame, text="3. 风电成本", padding="8")
+        wind_cost_frame.grid(row=ml_row_idx, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=5)
+        ml_row_idx += 1
+        
+        ttk.Label(wind_cost_frame, text="投资年度折旧 (万元):").grid(row=0, column=0, sticky=tk.W, pady=3, padx=5)
+        self.detailed_wind_depreciation_var = tk.DoubleVar(value=10000.0)
+        ttk.Entry(wind_cost_frame, textvariable=self.detailed_wind_depreciation_var, width=15).grid(row=0, column=1, pady=3, padx=5)
+        
+        ttk.Label(wind_cost_frame, text="备份费和政府基金 (元/kWh):").grid(row=1, column=0, sticky=tk.W, pady=3, padx=5)
+        self.detailed_wind_backup_fee_var = tk.DoubleVar(value=0.05)
+        ttk.Entry(wind_cost_frame, textvariable=self.detailed_wind_backup_fee_var, width=15).grid(row=1, column=1, pady=3, padx=5)
+        
+        ttk.Label(wind_cost_frame, text="度电价格 (元/kWh):").grid(row=2, column=0, sticky=tk.W, pady=3, padx=5)
+        self.detailed_wind_unit_price_var = tk.DoubleVar(value=0.3)
+        ttk.Entry(wind_cost_frame, textvariable=self.detailed_wind_unit_price_var, width=15).grid(row=2, column=1, pady=3, padx=5)
+        
+        # 第 3 列：火电成本输入
+        middle_right_input_frame = ttk.LabelFrame(top_input_frame, text="5. 火电成本", padding="10")
+        middle_right_input_frame.grid(row=0, column=2, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(5, 5))
         
         # === 5. 火电成本输入 ===
         thermal_row = 0
         
         # 新增两项：火电制造成本和火电人工成本
-        ttk.Label(middle_input_frame, text="火电制造成本 (万元):").grid(row=thermal_row, column=0, sticky=tk.W, pady=3, padx=5)
+        ttk.Label(middle_right_input_frame, text="火电制造成本 (万元):").grid(row=thermal_row, column=0, sticky=tk.W, pady=3, padx=5)
         self.detailed_thermal_manufacturing_cost_var = tk.DoubleVar(value=19535.0)
-        ttk.Entry(middle_input_frame, textvariable=self.detailed_thermal_manufacturing_cost_var, width=15).grid(row=thermal_row, column=1, pady=3, padx=5)
+        ttk.Entry(middle_right_input_frame, textvariable=self.detailed_thermal_manufacturing_cost_var, width=15).grid(row=thermal_row, column=1, pady=3, padx=5)
         thermal_row += 1
         
-        ttk.Label(middle_input_frame, text="火电人工成本 (万元):").grid(row=thermal_row, column=0, sticky=tk.W, pady=3, padx=5)
+        ttk.Label(middle_right_input_frame, text="火电人工成本 (万元):").grid(row=thermal_row, column=0, sticky=tk.W, pady=3, padx=5)
         self.detailed_thermal_labor_cost_var = tk.DoubleVar(value=4046.0)
-        ttk.Entry(middle_input_frame, textvariable=self.detailed_thermal_labor_cost_var, width=15).grid(row=thermal_row, column=1, pady=3, padx=5)
+        ttk.Entry(middle_right_input_frame, textvariable=self.detailed_thermal_labor_cost_var, width=15).grid(row=thermal_row, column=1, pady=3, padx=5)
         thermal_row += 1
         
         # 分隔线
-        ttk.Separator(middle_input_frame, orient='horizontal').grid(row=thermal_row, column=0, columnspan=2, sticky='ew', pady=10)
+        ttk.Separator(middle_right_input_frame, orient='horizontal').grid(row=thermal_row, column=0, columnspan=2, sticky='ew', pady=10)
         thermal_row += 1
         
         # 政府性基金
-        ttk.Label(middle_input_frame, text="政府性基金 (元/kWh):").grid(row=thermal_row, column=0, sticky=tk.W, pady=3, padx=5)
+        ttk.Label(middle_right_input_frame, text="政府性基金 (元/kWh):").grid(row=thermal_row, column=0, sticky=tk.W, pady=3, padx=5)
         self.detailed_thermal_government_fund_var = tk.DoubleVar(value=0.0241)
-        ttk.Entry(middle_input_frame, textvariable=self.detailed_thermal_government_fund_var, width=15).grid(row=thermal_row, column=1, pady=3, padx=5)
+        ttk.Entry(middle_right_input_frame, textvariable=self.detailed_thermal_government_fund_var, width=15).grid(row=thermal_row, column=1, pady=3, padx=5)
         thermal_row += 1
         
         # 政策性交叉补贴
-        ttk.Label(middle_input_frame, text="政策性交叉补贴 (元/kWh):").grid(row=thermal_row, column=0, sticky=tk.W, pady=3, padx=5)
+        ttk.Label(middle_right_input_frame, text="政策性交叉补贴 (元/kWh):").grid(row=thermal_row, column=0, sticky=tk.W, pady=3, padx=5)
         self.detailed_thermal_policy_subsidy_var = tk.DoubleVar(value=0.0128)
-        ttk.Entry(middle_input_frame, textvariable=self.detailed_thermal_policy_subsidy_var, width=15).grid(row=thermal_row, column=1, pady=3, padx=5)
+        ttk.Entry(middle_right_input_frame, textvariable=self.detailed_thermal_policy_subsidy_var, width=15).grid(row=thermal_row, column=1, pady=3, padx=5)
         thermal_row += 1
         
         # 分隔线
-        ttk.Separator(middle_input_frame, orient='horizontal').grid(row=thermal_row, column=0, columnspan=2, sticky='ew', pady=10)
+        ttk.Separator(middle_right_input_frame, orient='horizontal').grid(row=thermal_row, column=0, columnspan=2, sticky='ew', pady=10)
         thermal_row += 1
         
         # 备容费（单选按钮切换计费方式）
-        reserve_fee_frame = ttk.LabelFrame(middle_input_frame, text="备容费", padding="5")
+        reserve_fee_frame = ttk.LabelFrame(middle_right_input_frame, text="备容费", padding="5")
         reserve_fee_frame.grid(row=thermal_row, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=5)
         thermal_row += 1
         
@@ -4717,42 +4731,42 @@ class EnergyBalanceApp:
         self.detailed_thermal_reserve_fee_total_var = tk.DoubleVar(value=0.0)
         ttk.Entry(total_price_frame, textvariable=self.detailed_thermal_reserve_fee_total_var, width=10).pack(side=tk.LEFT)
         
-        ttk.Label(middle_input_frame, text="入炉煤综合单价 (元/吨):").grid(row=thermal_row, column=0, sticky=tk.W, pady=3, padx=5)
+        ttk.Label(middle_right_input_frame, text="入炉煤综合单价 (元/吨):").grid(row=thermal_row, column=0, sticky=tk.W, pady=3, padx=5)
         self.detailed_thermal_coal_price_var = tk.DoubleVar(value=162.4)
-        ttk.Entry(middle_input_frame, textvariable=self.detailed_thermal_coal_price_var, width=15).grid(row=thermal_row, column=1, pady=3, padx=5)
+        ttk.Entry(middle_right_input_frame, textvariable=self.detailed_thermal_coal_price_var, width=15).grid(row=thermal_row, column=1, pady=3, padx=5)
         thermal_row += 1
         
-        ttk.Label(middle_input_frame, text="火电基准煤耗 (g/kWh):").grid(row=thermal_row, column=0, sticky=tk.W, pady=3, padx=5)
+        ttk.Label(middle_right_input_frame, text="火电基准煤耗 (g/kWh):").grid(row=thermal_row, column=0, sticky=tk.W, pady=3, padx=5)
         self.detailed_thermal_base_coal_var = tk.DoubleVar(value=500.0)
-        ttk.Entry(middle_input_frame, textvariable=self.detailed_thermal_base_coal_var, width=15).grid(row=thermal_row, column=1, pady=3, padx=5)
+        ttk.Entry(middle_right_input_frame, textvariable=self.detailed_thermal_base_coal_var, width=15).grid(row=thermal_row, column=1, pady=3, padx=5)
         thermal_row += 1
         
         # 分隔线
-        ttk.Separator(middle_input_frame, orient='horizontal').grid(row=thermal_row, column=0, columnspan=2, sticky='ew', pady=10)
+        ttk.Separator(middle_right_input_frame, orient='horizontal').grid(row=thermal_row, column=0, columnspan=2, sticky='ew', pady=10)
         thermal_row += 1
         
-        ttk.Label(middle_input_frame, text="碳排放分配系数:").grid(row=thermal_row, column=0, sticky=tk.W, pady=3, padx=5)
+        ttk.Label(middle_right_input_frame, text="碳排放分配系数:").grid(row=thermal_row, column=0, sticky=tk.W, pady=3, padx=5)
         self.detailed_thermal_carbon_alloc_var = tk.DoubleVar(value=0.8049)
-        ttk.Entry(middle_input_frame, textvariable=self.detailed_thermal_carbon_alloc_var, width=15).grid(row=thermal_row, column=1, pady=3, padx=5)
+        ttk.Entry(middle_right_input_frame, textvariable=self.detailed_thermal_carbon_alloc_var, width=15).grid(row=thermal_row, column=1, pady=3, padx=5)
         thermal_row += 1
         
-        ttk.Label(middle_input_frame, text="碳排放单价 (元/吨):").grid(row=thermal_row, column=0, sticky=tk.W, pady=3, padx=5)
+        ttk.Label(middle_right_input_frame, text="碳排放单价 (元/吨):").grid(row=thermal_row, column=0, sticky=tk.W, pady=3, padx=5)
         self.detailed_thermal_carbon_price_var = tk.DoubleVar(value=80.0)
-        ttk.Entry(middle_input_frame, textvariable=self.detailed_thermal_carbon_price_var, width=15).grid(row=thermal_row, column=1, pady=3, padx=5)
+        ttk.Entry(middle_right_input_frame, textvariable=self.detailed_thermal_carbon_price_var, width=15).grid(row=thermal_row, column=1, pady=3, padx=5)
         thermal_row += 1
         
-        ttk.Label(middle_input_frame, text="绿色能源占比:").grid(row=thermal_row, column=0, sticky=tk.W, pady=3, padx=5)
+        ttk.Label(middle_right_input_frame, text="绿色能源占比:").grid(row=thermal_row, column=0, sticky=tk.W, pady=3, padx=5)
         self.detailed_thermal_green_ratio_var = tk.DoubleVar(value=0.3)
-        ttk.Entry(middle_input_frame, textvariable=self.detailed_thermal_green_ratio_var, width=15).grid(row=thermal_row, column=1, pady=3, padx=5)
+        ttk.Entry(middle_right_input_frame, textvariable=self.detailed_thermal_green_ratio_var, width=15).grid(row=thermal_row, column=1, pady=3, padx=5)
         thermal_row += 1
         
-        ttk.Label(middle_input_frame, text="绿证单价 (元/kWh):").grid(row=thermal_row, column=0, sticky=tk.W, pady=3, padx=5)
+        ttk.Label(middle_right_input_frame, text="绿证单价 (元/kWh):").grid(row=thermal_row, column=0, sticky=tk.W, pady=3, padx=5)
         self.detailed_thermal_green_cert_price_var = tk.DoubleVar(value=0.008)
-        ttk.Entry(middle_input_frame, textvariable=self.detailed_thermal_green_cert_price_var, width=15).grid(row=thermal_row, column=1, pady=3, padx=5)
+        ttk.Entry(middle_right_input_frame, textvariable=self.detailed_thermal_green_cert_price_var, width=15).grid(row=thermal_row, column=1, pady=3, padx=5)
         
-        # 第 3 列：火电煤耗变化曲线
+        # 第 4 列：火电煤耗变化曲线
         right_input_frame = ttk.LabelFrame(top_input_frame, text="6. 火电煤耗变化曲线", padding="10")
-        right_input_frame.grid(row=0, column=2, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(5, 0))
+        right_input_frame.grid(row=0, column=3, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(5, 0))
         
         # 曲线系数输入
         curve_params_frame = ttk.Frame(right_input_frame)
@@ -4783,6 +4797,7 @@ class EnergyBalanceApp:
         top_input_frame.columnconfigure(0, weight=1)
         top_input_frame.columnconfigure(1, weight=1)
         top_input_frame.columnconfigure(2, weight=1)
+        top_input_frame.columnconfigure(3, weight=1)
         top_input_frame.rowconfigure(0, weight=1)
         
         # ===== 下方结果展示区域 =====
@@ -5067,8 +5082,10 @@ class EnergyBalanceApp:
             
             self.data_model.detailed_cost_params['pv_depreciation'] = self.detailed_pv_depreciation_var.get()
             self.data_model.detailed_cost_params['pv_backup_fee'] = self.detailed_pv_backup_fee_var.get()
+            self.data_model.detailed_cost_params['pv_unit_price'] = self.detailed_pv_unit_price_var.get()
             self.data_model.detailed_cost_params['wind_depreciation'] = self.detailed_wind_depreciation_var.get()
             self.data_model.detailed_cost_params['wind_backup_fee'] = self.detailed_wind_backup_fee_var.get()
+            self.data_model.detailed_cost_params['wind_unit_price'] = self.detailed_wind_unit_price_var.get()
             self.data_model.detailed_cost_params['other_fixed_cost'] = self.detailed_other_fixed_cost_var.get()
             self.data_model.detailed_cost_params['other_variable_cost'] = self.detailed_other_variable_cost_var.get()
             
@@ -5118,8 +5135,10 @@ class EnergyBalanceApp:
             
             self.detailed_pv_depreciation_var.set(self.data_model.detailed_cost_params.get('pv_depreciation', 14000.0))
             self.detailed_pv_backup_fee_var.set(self.data_model.detailed_cost_params.get('pv_backup_fee', 0.069))
+            self.detailed_pv_unit_price_var.set(self.data_model.detailed_cost_params.get('pv_unit_price', 0.3))
             self.detailed_wind_depreciation_var.set(self.data_model.detailed_cost_params.get('wind_depreciation', 10000.0))
             self.detailed_wind_backup_fee_var.set(self.data_model.detailed_cost_params.get('wind_backup_fee', 0.05))
+            self.detailed_wind_unit_price_var.set(self.data_model.detailed_cost_params.get('wind_unit_price', 0.3))
             self.detailed_other_fixed_cost_var.set(self.data_model.detailed_cost_params.get('other_fixed_cost', 0.0))
             self.detailed_other_variable_cost_var.set(self.data_model.detailed_cost_params.get('other_variable_cost', 0.0))
             
