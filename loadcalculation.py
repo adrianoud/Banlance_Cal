@@ -4818,15 +4818,15 @@ class EnergyBalanceApp:
         right_summary_frame = ttk.LabelFrame(bottom_result_frame, text="年度汇总", padding=5)
         right_summary_frame.grid(row=0, column=1, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(5, 0))
         
-        # 年度汇总表格 - 三列：项目、基于投资成本、基于度电价格
-        columns = ('项目', '基于投资成本', '基于度电价格')
+        # 年度汇总表格 - 三列：项目、集团成本、园区成本
+        columns = ('项目', '集团成本', '园区成本')
         self.detailed_summary_tree = ttk.Treeview(right_summary_frame, columns=columns, show='headings', height=12)
         self.detailed_summary_tree.heading('项目', text='项目')
-        self.detailed_summary_tree.heading('基于投资成本', text='基于投资成本')
-        self.detailed_summary_tree.heading('基于度电价格', text='基于度电价格')
+        self.detailed_summary_tree.heading('集团成本', text='集团成本')
+        self.detailed_summary_tree.heading('园区成本', text='园区成本')
         self.detailed_summary_tree.column('项目', width=100)
-        self.detailed_summary_tree.column('基于投资成本', width=110)
-        self.detailed_summary_tree.column('基于度电价格', width=110)
+        self.detailed_summary_tree.column('集团成本', width=110)
+        self.detailed_summary_tree.column('园区成本', width=110)
         
         # 添加滚动条
         summary_scrollbar = ttk.Scrollbar(right_summary_frame, orient=tk.VERTICAL, command=self.detailed_summary_tree.yview)
