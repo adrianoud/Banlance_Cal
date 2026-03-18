@@ -4581,18 +4581,18 @@ class EnergyBalanceApp:
         
         # ===== 上方输入区域 =====
         top_input_frame = ttk.Frame(tab)
-        top_input_frame.grid(row=1, column=0, sticky=(tk.W, tk.E), pady=(0, 10))
+        top_input_frame.grid(row=1, column=0, sticky=(tk.W, tk.E), pady=(0, 5))
         
         # 第 1 列：下网成本、其他成本
-        left_input_frame = ttk.LabelFrame(top_input_frame, text="成本输入", padding="10")
+        left_input_frame = ttk.LabelFrame(top_input_frame, text="成本输入", padding=5)
         left_input_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(0, 5))
         
         # 创建网格布局：2 列，每行放置不同的成本项
         row_idx = 0
         
         # === 1. 下网成本输入 ===
-        grid_price_frame = ttk.LabelFrame(left_input_frame, text="1. 下网成本", padding="8")
-        grid_price_frame.grid(row=row_idx, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=5)
+        grid_price_frame = ttk.LabelFrame(left_input_frame, text="1. 下网成本", padding=5)
+        grid_price_frame.grid(row=row_idx, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=3)
         row_idx += 1
         
         ttk.Label(grid_price_frame, text="基本电费 (万元):").grid(row=0, column=0, sticky=tk.W, pady=3, padx=5)
@@ -4617,8 +4617,8 @@ class EnergyBalanceApp:
         ttk.Entry(grid_price_frame, textvariable=self.detailed_grid_government_fund_var, width=15).grid(row=4, column=1, pady=3, padx=5)
         
         # === 2. 其他成本输入 ===
-        other_cost_frame = ttk.LabelFrame(left_input_frame, text="4. 其他成本", padding="8")
-        other_cost_frame.grid(row=row_idx, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=5)
+        other_cost_frame = ttk.LabelFrame(left_input_frame, text="4. 其他成本", padding=5)
+        other_cost_frame.grid(row=row_idx, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=3)
         row_idx += 1
         
         ttk.Label(other_cost_frame, text="其他固定成本 (万元):").grid(row=0, column=0, sticky=tk.W, pady=3, padx=5)
@@ -4630,14 +4630,14 @@ class EnergyBalanceApp:
         ttk.Entry(other_cost_frame, textvariable=self.detailed_other_variable_cost_var, width=15).grid(row=1, column=1, pady=3, padx=5)
         
         # 第 2 列：光伏成本、风电成本
-        middle_left_input_frame = ttk.LabelFrame(top_input_frame, text="新能源成本", padding="10")
+        middle_left_input_frame = ttk.LabelFrame(top_input_frame, text="新能源成本", padding=5)
         middle_left_input_frame.grid(row=0, column=1, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(5, 5))
         
         ml_row_idx = 0
         
         # === 2. 光伏成本输入 ===
-        pv_cost_frame = ttk.LabelFrame(middle_left_input_frame, text="2. 光伏成本", padding="8")
-        pv_cost_frame.grid(row=ml_row_idx, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=5)
+        pv_cost_frame = ttk.LabelFrame(middle_left_input_frame, text="2. 光伏成本", padding=5)
+        pv_cost_frame.grid(row=ml_row_idx, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=3)
         ml_row_idx += 1
         
         ttk.Label(pv_cost_frame, text="投资年度折旧 (万元):").grid(row=0, column=0, sticky=tk.W, pady=3, padx=5)
@@ -4653,8 +4653,8 @@ class EnergyBalanceApp:
         ttk.Entry(pv_cost_frame, textvariable=self.detailed_pv_unit_price_var, width=15).grid(row=2, column=1, pady=3, padx=5)
         
         # === 3. 风电成本输入 ===
-        wind_cost_frame = ttk.LabelFrame(middle_left_input_frame, text="3. 风电成本", padding="8")
-        wind_cost_frame.grid(row=ml_row_idx, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=5)
+        wind_cost_frame = ttk.LabelFrame(middle_left_input_frame, text="3. 风电成本", padding=5)
+        wind_cost_frame.grid(row=ml_row_idx, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=3)
         ml_row_idx += 1
         
         ttk.Label(wind_cost_frame, text="投资年度折旧 (万元):").grid(row=0, column=0, sticky=tk.W, pady=3, padx=5)
@@ -4670,7 +4670,7 @@ class EnergyBalanceApp:
         ttk.Entry(wind_cost_frame, textvariable=self.detailed_wind_unit_price_var, width=15).grid(row=2, column=1, pady=3, padx=5)
         
         # 第 3 列：火电成本输入
-        middle_right_input_frame = ttk.LabelFrame(top_input_frame, text="5. 火电成本", padding="10")
+        middle_right_input_frame = ttk.LabelFrame(top_input_frame, text="5. 火电成本", padding=5)
         middle_right_input_frame.grid(row=0, column=2, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(5, 5))
         
         # === 5. 火电成本输入 ===
@@ -4688,7 +4688,7 @@ class EnergyBalanceApp:
         thermal_row += 1
         
         # 分隔线
-        ttk.Separator(middle_right_input_frame, orient='horizontal').grid(row=thermal_row, column=0, columnspan=2, sticky='ew', pady=10)
+        ttk.Separator(middle_right_input_frame, orient='horizontal').grid(row=thermal_row, column=0, columnspan=2, sticky='ew', pady=5)
         thermal_row += 1
         
         # 政府性基金
@@ -4704,7 +4704,7 @@ class EnergyBalanceApp:
         thermal_row += 1
         
         # 分隔线
-        ttk.Separator(middle_right_input_frame, orient='horizontal').grid(row=thermal_row, column=0, columnspan=2, sticky='ew', pady=10)
+        ttk.Separator(middle_right_input_frame, orient='horizontal').grid(row=thermal_row, column=0, columnspan=2, sticky='ew', pady=5)
         thermal_row += 1
         
         # 备容费（单选按钮切换计费方式）
@@ -4742,7 +4742,7 @@ class EnergyBalanceApp:
         thermal_row += 1
         
         # 分隔线
-        ttk.Separator(middle_right_input_frame, orient='horizontal').grid(row=thermal_row, column=0, columnspan=2, sticky='ew', pady=10)
+        ttk.Separator(middle_right_input_frame, orient='horizontal').grid(row=thermal_row, column=0, columnspan=2, sticky='ew', pady=5)
         thermal_row += 1
         
         ttk.Label(middle_right_input_frame, text="碳排放分配系数:").grid(row=thermal_row, column=0, sticky=tk.W, pady=3, padx=5)
@@ -4765,12 +4765,12 @@ class EnergyBalanceApp:
         ttk.Entry(middle_right_input_frame, textvariable=self.detailed_thermal_green_cert_price_var, width=15).grid(row=thermal_row, column=1, pady=3, padx=5)
         
         # 第 4 列：火电煤耗变化曲线
-        right_input_frame = ttk.LabelFrame(top_input_frame, text="6. 火电煤耗变化曲线", padding="10")
+        right_input_frame = ttk.LabelFrame(top_input_frame, text="6. 火电煤耗变化曲线", padding=5)
         right_input_frame.grid(row=0, column=3, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(5, 0))
         
         # 曲线系数输入
         curve_params_frame = ttk.Frame(right_input_frame)
-        curve_params_frame.pack(fill=tk.X, pady=(0, 10))
+        curve_params_frame.pack(fill=tk.X, pady=(0, 5))
         
         ttk.Label(curve_params_frame, text="二次项系数:").grid(row=0, column=0, sticky=tk.W, pady=3, padx=5)
         self.detailed_thermal_coal_quadratic_var = tk.DoubleVar(value=0.0)
@@ -4805,7 +4805,7 @@ class EnergyBalanceApp:
         bottom_result_frame.grid(row=2, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(0, 10))
         
         # 左侧：8760 小时趋势图
-        left_plot_frame = ttk.LabelFrame(bottom_result_frame, text="8760 小时发电出力及下网负荷趋势", padding="10")
+        left_plot_frame = ttk.LabelFrame(bottom_result_frame, text="8760 小时发电出力及下网负荷趋势", padding=5)
         left_plot_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(0, 5))
         
         # 创建 matplotlib 图形
@@ -4815,18 +4815,18 @@ class EnergyBalanceApp:
         self.detailed_cost_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True, pady=5)
         
         # 右侧：年度汇总值
-        right_summary_frame = ttk.LabelFrame(bottom_result_frame, text="年度汇总", padding="10")
+        right_summary_frame = ttk.LabelFrame(bottom_result_frame, text="年度汇总", padding=5)
         right_summary_frame.grid(row=0, column=1, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(5, 0))
         
         # 年度汇总表格 - 三列：项目、基于投资成本、基于度电价格
         columns = ('项目', '基于投资成本', '基于度电价格')
-        self.detailed_summary_tree = ttk.Treeview(right_summary_frame, columns=columns, show='headings', height=15)
+        self.detailed_summary_tree = ttk.Treeview(right_summary_frame, columns=columns, show='headings', height=12)
         self.detailed_summary_tree.heading('项目', text='项目')
         self.detailed_summary_tree.heading('基于投资成本', text='基于投资成本')
         self.detailed_summary_tree.heading('基于度电价格', text='基于度电价格')
-        self.detailed_summary_tree.column('项目', width=120)
-        self.detailed_summary_tree.column('基于投资成本', width=120)
-        self.detailed_summary_tree.column('基于度电价格', width=120)
+        self.detailed_summary_tree.column('项目', width=100)
+        self.detailed_summary_tree.column('基于投资成本', width=110)
+        self.detailed_summary_tree.column('基于度电价格', width=110)
         
         # 添加滚动条
         summary_scrollbar = ttk.Scrollbar(right_summary_frame, orient=tk.VERTICAL, command=self.detailed_summary_tree.yview)
@@ -4876,8 +4876,8 @@ class EnergyBalanceApp:
             ('风电度电成本', '0.0000 元/kWh', '0.0000 元/kWh'),
         ]
         
-        for item, value in summary_data:
-            self.detailed_summary_tree.insert('', tk.END, values=(item, value))
+        for item, value1, value2 in summary_data:
+            self.detailed_summary_tree.insert('', tk.END, values=(item, value1, value2))
     
     def update_detailed_cost_analysis(self):
         """
