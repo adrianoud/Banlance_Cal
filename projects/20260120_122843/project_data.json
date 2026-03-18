@@ -43916,7 +43916,7 @@
     "pv_backup_fee": 0.079,
     "wind_depreciation": 10000.0,
     "wind_backup_fee": 0.05,
-    "other_fixed_cost": 0.0,
+    "other_fixed_cost": 1.0,
     "other_variable_cost": 0.0,
     "thermal_manufacturing_cost": 18000.0,
     "thermal_labor_cost": 18000.0,
