@@ -110,7 +110,7 @@ class DetailedCostAnalyzer:
         # 计算光伏总出力（kWh）
         total_pv_energy_kwh = np.sum(pv_output_hourly)
         
-        # 方法 1：光伏总成本 = 折旧成本 + 备份费和政府基金
+        # 方法 1：光伏总成本 = 折旧成本（固定）+ 备份费和政府基金（可变）
         backup_fee_total_wan = total_pv_energy_kwh * pv_backup_fee / 10000.0  # 转换为万元
         total_pv_cost_wan = pv_depreciation + backup_fee_total_wan
         
@@ -132,6 +132,8 @@ class DetailedCostAnalyzer:
             'total_cost': total_pv_cost_wan,  # 万元（基于投资成本）
             'unit_cost': unit_cost_yuan_kwh,  # 元/kWh（基于投资成本）
             'total_energy': total_pv_energy_kwh,  # kWh
+            'fixed_cost': pv_depreciation,  # 万元（固定成本 - 折旧）
+            'variable_cost': backup_fee_total_wan,  # 万元（可变成本 - 备份费）
             'total_cost_by_unit_price': total_pv_cost_by_unit_price_wan,  # 万元（基于度电价格）
             'unit_cost_by_unit_price': unit_cost_by_unit_price_yuan_kwh  # 元/kWh（基于度电价格）
         }
@@ -161,7 +163,7 @@ class DetailedCostAnalyzer:
         # 计算风电总出力（kWh）
         total_wind_energy_kwh = np.sum(wind_output_hourly)
         
-        # 方法 1：风电总成本 = 折旧成本 + 备份费和政府基金
+        # 方法 1：风电总成本 = 折旧成本（固定）+ 备份费和政府基金（可变）
         backup_fee_total_wan = total_wind_energy_kwh * wind_backup_fee / 10000.0  # 转换为万元
         total_wind_cost_wan = wind_depreciation + backup_fee_total_wan
         
@@ -183,6 +185,8 @@ class DetailedCostAnalyzer:
             'total_cost': total_wind_cost_wan,  # 万元（基于投资成本）
             'unit_cost': unit_cost_yuan_kwh,  # 元/kWh（基于投资成本）
             'total_energy': total_wind_energy_kwh,  # kWh
+            'fixed_cost': wind_depreciation,  # 万元（固定成本 - 折旧）
+            'variable_cost': backup_fee_total_wan,  # 万元（可变成本 - 备份费）
             'total_cost_by_unit_price': total_wind_cost_by_unit_price_wan,  # 万元（基于度电价格）
             'unit_cost_by_unit_price': unit_cost_by_unit_price_yuan_kwh  # 元/kWh（基于度电价格）
         }
