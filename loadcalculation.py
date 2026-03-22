@@ -7680,11 +7680,189 @@ class EnergyBalanceApp:
         for item, value in summary_data:
             self.v2_summary_tree.insert('', tk.END, values=(item, value))
     
+    def update_v2_cost_chart(self, results):
+        """
+        更新成本分析 2.0 的 8760 小时趋势图
+        :param results: 计算结果字典
+        """
+        try:
+            # 清除旧图表
+            self.v2_cost_ax.clear()
+            
+            # 获取每小时数据
+            hourly_thermal_var_cost = results['thermal'].get('hourly_variable_cost', [])
+            hourly_pv_var_cost = results['pv'].get('hourly_variable_cost', [])
+            hourly_wind_var_cost = results['wind'].get('hourly_variable_cost', [])
+            hourly_grid_cost = results['grid'].get('hourly_cost', [])
+            
+            # 生成时间序列（8760 小时）
+            from datetime import datetime, timedelta
+            start_date = datetime(2025, 1, 1)
+            dates = [start_date + timedelta(hours=h) for h in range(8760)]
+            
+            # 绘制 stacked area chart
+            if hourly_thermal_var_cost and hourly_pv_var_cost and hourly_wind_var_cost and hourly_grid_cost:
+                # 转换为 numpy 数组方便处理
+                import numpy as np
+                thermal_arr = np.array(hourly_thermal_var_cost) / 10000.0  # 元→万元
+                pv_arr = np.array(hourly_pv_var_cost) / 10000.0
+                wind_arr = np.array(hourly_wind_var_cost) / 10000.0
+                grid_arr = np.array(hourly_grid_cost) / 10000.0
+                
+                # 堆叠面积图
+                self.v2_cost_ax.fill_between(dates, 0, grid_arr, alpha=0.7, label='下网成本')
+                self.v2_cost_ax.fill_between(dates, grid_arr, grid_arr + wind_arr, alpha=0.7, label='风电成本')
+                self.v2_cost_ax.fill_between(dates, grid_arr + wind_arr, grid_arr + wind_arr + pv_arr, alpha=0.7, label='光伏成本')
+                self.v2_cost_ax.fill_between(dates, grid_arr + wind_arr + pv_arr, grid_arr + wind_arr + pv_arr + thermal_arr, alpha=0.7, label='火电成本')
+            
+            # 设置图表属性
+            self.v2_cost_ax.set_xlabel('日期')
+            self.v2_cost_ax.set_ylabel('成本 (万元/小时)')
+            self.v2_cost_ax.set_title('8760 小时发电成本趋势图')
+            self.v2_cost_ax.legend(loc='upper left', bbox_to_anchor=(1, 1))
+            self.v2_cost_ax.grid(True, alpha=0.3)
+            
+            # 格式化 x 轴日期
+            import matplotlib.dates as mdates
+            self.v2_cost_ax.xaxis.set_major_formatter(mdates.DateFormatter('%m-%d'))
+            self.v2_cost_ax.xaxis.set_major_locator(mdates.MonthLocator())
+            plt.setp(self.v2_cost_ax.xaxis.get_majorticklabels(), rotation=45, ha='right')
+            
+            # 调整布局
+            self.v2_cost_figure.tight_layout()
+            
+            # 刷新画布
+            self.v2_cost_canvas.draw()
+            
+        except Exception as e:
+            print(f"更新成本图表失败：{str(e)}")
+            # 如果出错，显示默认文本
+            self.v2_cost_ax.clear()
+            self.v2_cost_ax.text(0.5, 0.5, '图表生成失败\n请检查数据', 
+                                horizontalalignment='center', verticalalignment='center',
+                                transform=self.v2_cost_ax.transAxes, fontsize=12)
+            self.v2_cost_canvas.draw()
+    
+    def update_v2_cost_summary_table(self, results):
+        """
+        更新成本分析 2.0 汇总表格
+        :param results: 计算结果字典
+        """
+        try:
+            # 清空现有数据
+            for item in self.v2_summary_tree.get_children():
+                self.v2_summary_tree.delete(item)
+            
+            # 构建汇总数据
+            summary_data = []
+            
+            # ===== 火电部分 =====
+            thermal = results['thermal']
+            summary_data.extend([
+                ('🔥 火电总成本', f"{thermal['total_cost']:.2f} 万元"),
+                ('  └─ 可变成本', f"{thermal['variable_cost']:.2f} 万元"),
+                ('  └─ 固定成本', f"{thermal['fixed_cost']:.2f} 万元"),
+                ('  └─ 碳排费用', f"{thermal['carbon_cost']:.2f} 万元"),
+                ('  └─ 绿证费用', f"{thermal['green_cert_cost']:.2f} 万元"),
+                ('  📊 度电成本', f"{thermal['unit_cost']:.4f} 元/kWh"),
+                ('  ⚡ 总出力', f"{int(thermal['total_energy']/10000)} 万度"),
+            ])
+            
+            # ===== 光伏部分 =====
+            pv = results['pv']
+            summary_data.extend([
+                ('☀️ 光伏总成本', f"{pv['total_cost']:.2f} 万元"),
+                ('  └─ 可变成本', f"{pv['variable_cost']:.2f} 万元"),
+                ('  └─ 固定成本', f"{pv['fixed_cost']:.2f} 万元"),
+                ('  └─ 绿证抵扣', f"-{pv['green_cert_income']:.2f} 万元"),
+                ('  📊 度电成本', f"{pv['unit_cost']:.4f} 元/kWh"),
+                ('  ⚡ 总出力', f"{int(pv['total_energy']/10000)} 万度"),
+            ])
+            
+            # ===== 风电部分 =====
+            wind = results['wind']
+            summary_data.extend([
+                ('💨 风电总成本', f"{wind['total_cost']:.2f} 万元"),
+                ('  └─ 可变成本', f"{wind['variable_cost']:.2f} 万元"),
+                ('  └─ 固定成本', f"{wind['fixed_cost']:.2f} 万元"),
+                ('  └─ 绿证抵扣', f"-{wind['green_cert_income']:.2f} 万元"),
+                ('  📊 度电成本', f"{wind['unit_cost']:.4f} 元/kWh"),
+                ('  ⚡ 总出力', f"{int(wind['total_energy']/10000)} 万度"),
+            ])
+            
+            # ===== 下网部分 =====
+            grid = results['grid']
+            summary_data.extend([
+                ('⚡ 下网总成本', f"{grid['total_cost']:.2f} 万元"),
+                ('  └─ 变动成本', f"{grid['variable_cost']:.2f} 万元"),
+                ('  └─ 基本电费', f"{grid['base_cost']:.2f} 万元"),
+                ('  └─ 附加费用', f"{grid['additional_fees_cost']:.2f} 万元"),
+                ('  📊 度电成本', f"{grid['unit_cost']:.4f} 元/kWh"),
+                ('  ⚡ 总负荷', f"{int(grid['total_energy']/10000)} 万度"),
+            ])
+            
+            # ===== 汇总 =====
+            summary = results['summary']
+            summary_data.extend([
+                ('━━━━━━━━━━━━━━━━━━━━', ''),
+                ('💰 总成本合计', f"{summary['total_cost']:.2f} 万元"),
+                ('📊 平均度电成本', f"{(summary['total_cost']*10000)/summary['total_energy']:.4f} 元/kWh" if summary['total_energy'] > 0 else 'N/A',),
+            ])
+            
+            # 插入到表格
+            for item, value in summary_data:
+                self.v2_summary_tree.insert('', tk.END, values=(item, value))
+            
+        except Exception as e:
+            print(f"更新汇总表格失败：{str(e)}")
+            messagebox.showerror("错误", f"更新汇总表格失败：{str(e)}")
+    
     def update_v2_cost_analysis(self):
         """
         更新成本分析 2.0 结果
+        1. 检查是否已完成平衡计算
+        2. 调用计算模块进行 8760 小时逐时计算
+        3. 显示结果到图表和表格
         """
-        messagebox.showinfo("提示", "成本分析 2.0 计算功能开发中...")
+        try:
+            # 1. 检查是否已完成平衡计算
+            if not self.results or 'hourly_generation' not in self.results:
+                messagebox.showwarning(
+                    "提示", 
+                    "请先进行平衡计算！\n\n成本分析 2.0 需要使用平衡计算的结果数据。"
+                )
+                return
+            
+            # 2. 导入计算模块
+            from cost_v2_calculation import CostV2Calculator
+            
+            # 3. 创建计算器实例
+            calculator = CostV2Calculator(self.data_model, self.results)
+            
+            # 4. 执行计算
+            calc_results = calculator.calculate_all()
+            
+            # 5. 更新图表显示
+            self.update_v2_cost_chart(calc_results)
+            
+            # 6. 更新表格显示
+            self.update_v2_cost_summary_table(calc_results)
+            
+            # 7. 提示用户
+            messagebox.showinfo(
+                "成功", 
+                f"成本分析 2.0 计算完成！\n\n"
+                f"总成本：{calc_results['summary']['total_cost']:.2f} 万元\n"
+                f"火电占比：{calc_results['summary']['thermal_ratio']:.1f}%\n"
+                f"光伏占比：{calc_results['summary']['pv_ratio']:.1f}%\n"
+                f"风电占比：{calc_results['summary']['wind_ratio']:.1f}%\n"
+                f"下网占比：{calc_results['summary']['grid_ratio']:.1f}%"
+            )
+            
+        except ImportError as e:
+            messagebox.showerror("错误", f"无法导入计算模块：{str(e)}")
+        except Exception as e:
+            messagebox.showerror("错误", f"成本分析 2.0 计算失败：{str(e)}")
     
     def save_v2_cost_parameters(self):
         """
