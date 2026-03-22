@@ -7839,7 +7839,8 @@ class EnergyBalanceApp:
             green_ratio = params.get('thermal_green_ratio', 0.3)  # 可再生能源占比要求
             
             # 潜在购买绿证费用（万元）
-            potential_green_cert_cost = park_energy_consumption * 10000 * green_ratio * green_cert_price / 10000.0
+            # park_energy_consumption 单位：kWh，转换为万元需要除以 10000
+            potential_green_cert_cost = park_energy_consumption * green_ratio * green_cert_price / 10000.0
             
             # 新能源抵扣绿证费用（万元）= 实际消纳电量 × 绿证单价 / 10000
             renewable_green_cert_offset = total_renewable_actual * green_cert_price / 10000.0
