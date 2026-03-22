@@ -321,6 +321,7 @@ class EnergyDataModel:
             'wind_cost_curve': self.wind_cost_curve,        # 新增
             'pv_cost_curve': self.pv_cost_curve,            # 新增
             'detailed_cost_params': self.detailed_cost_params,  # 新增成本详细分析参数
+            'cost_v2_params': getattr(self, 'cost_v2_params', {}),  # 新增成本分析 2.0 参数
             'optimized_results': getattr(self, 'optimized_results', None)
         }
         return data
@@ -443,6 +444,9 @@ class EnergyDataModel:
             'thermal_coal_linear': -0.4,
             'thermal_coal_constant': 1.4
         })
+        
+        # 加载成本分析 2.0 参数（新增）
+        self.cost_v2_params = data.get('cost_v2_params', {})
         
         # 加载优化结果（如果有）
         if 'optimized_results' in data and data['optimized_results'] is not None:
