@@ -1461,6 +1461,9 @@ class EnergyBalanceApp:
                 
                 # 加载成本详细分析参数
                 self.load_detailed_cost_parameters()
+                
+                # 加载成本分析 2.0 参数
+                self.load_v2_cost_parameters()
         
     def return_to_project_list(self):
         """返回项目列表界面"""
@@ -7601,9 +7604,245 @@ class EnergyBalanceApp:
     
     def save_v2_cost_parameters(self):
         """
-        保存成本分析 2.0 参数
+        保存成本分析 2.0 参数到数据模型
         """
-        messagebox.showinfo("提示", "成本分析 2.0 参数保存功能开发中...")
+        try:
+            # 初始化 v2 参数字典（如果不存在）
+            if not hasattr(self.data_model, 'cost_v2_params'):
+                self.data_model.cost_v2_params = {}
+            
+            # ===== 1. 火电部分参数 =====
+            # 直接材料
+            self.data_model.cost_v2_params['thermal_coal_price'] = self.v2_thermal_coal_price_var.get()
+            self.data_model.cost_v2_params['thermal_base_coal'] = self.v2_thermal_base_coal_var.get()
+            self.data_model.cost_v2_params['thermal_pure_water_cost'] = self.v2_thermal_pure_water_cost_var.get()
+            self.data_model.cost_v2_params['thermal_pure_water_unit'] = self.v2_thermal_pure_water_unit_var.get()
+            
+            # 直接人工
+            self.data_model.cost_v2_params['thermal_direct_labor'] = self.v2_thermal_direct_labor_var.get()
+            
+            # 制造费用
+            self.data_model.cost_v2_params['thermal_mgmt_labor'] = self.v2_thermal_mgmt_labor_var.get()
+            self.data_model.cost_v2_params['thermal_maintenance'] = self.v2_thermal_maintenance_var.get()
+            self.data_model.cost_v2_params['thermal_depreciation'] = self.v2_thermal_depreciation_var.get()
+            self.data_model.cost_v2_params['thermal_other_manufacturing'] = self.v2_thermal_other_manufacturing_var.get()
+            
+            # 备容与政府基金
+            self.data_model.cost_v2_params['thermal_reserve_fee_mode'] = self.v2_thermal_reserve_fee_mode_var.get()
+            self.data_model.cost_v2_params['thermal_reserve_fee_unit'] = self.v2_thermal_reserve_fee_unit_var.get()
+            self.data_model.cost_v2_params['thermal_reserve_fee_total'] = self.v2_thermal_reserve_fee_total_var.get()
+            self.data_model.cost_v2_params['thermal_government_fund'] = self.v2_thermal_government_fund_var.get()
+            self.data_model.cost_v2_params['thermal_policy_subsidy'] = self.v2_thermal_policy_subsidy_var.get()
+            
+            # 碳排放和绿证
+            self.data_model.cost_v2_params['thermal_carbon_intensity'] = self.v2_thermal_carbon_intensity_var.get()
+            self.data_model.cost_v2_params['thermal_heat_value'] = self.v2_thermal_heat_value_var.get()
+            self.data_model.cost_v2_params['thermal_carbon_content'] = self.v2_thermal_carbon_content_var.get()
+            self.data_model.cost_v2_params['thermal_carbon_price'] = self.v2_thermal_carbon_price_var.get()
+            self.data_model.cost_v2_params['thermal_green_ratio'] = self.v2_thermal_green_ratio_var.get()
+            
+            # 其他成本
+            self.data_model.cost_v2_params['thermal_other_fixed'] = self.v2_thermal_other_fixed_var.get()
+            self.data_model.cost_v2_params['thermal_other_variable'] = self.v2_thermal_other_variable_var.get()
+            
+            # 煤耗曲线参数
+            if hasattr(self, 'v2_thermal_curve_quadratic'):
+                self.data_model.cost_v2_params['thermal_coal_quadratic'] = self.v2_thermal_curve_quadratic.get()
+                self.data_model.cost_v2_params['thermal_coal_linear'] = self.v2_thermal_curve_linear.get()
+                self.data_model.cost_v2_params['thermal_coal_constant'] = self.v2_thermal_curve_constant.get()
+            
+            # ===== 2. 光伏部分参数 =====
+            self.data_model.cost_v2_params['pv_power_cost'] = self.v2_pv_power_cost_var.get()
+            self.data_model.cost_v2_params['pv_other_material'] = self.v2_pv_other_material_var.get()
+            self.data_model.cost_v2_params['pv_direct_labor'] = self.v2_pv_direct_labor_var.get()
+            self.data_model.cost_v2_params['pv_mgmt_labor'] = self.v2_pv_mgmt_labor_var.get()
+            self.data_model.cost_v2_params['pv_maintenance'] = self.v2_pv_maintenance_var.get()
+            self.data_model.cost_v2_params['pv_depreciation'] = self.v2_pv_depreciation_var.get()
+            self.data_model.cost_v2_params['pv_other_manufacturing'] = self.v2_pv_other_manufacturing_var.get()
+            self.data_model.cost_v2_params['pv_reserve_fee'] = self.v2_pv_reserve_fee_var.get()
+            self.data_model.cost_v2_params['pv_government_fund'] = self.v2_pv_government_fund_var.get()
+            self.data_model.cost_v2_params['pv_policy_subsidy'] = self.v2_pv_policy_subsidy_var.get()
+            self.data_model.cost_v2_params['pv_sale_price'] = self.v2_pv_sale_price_var.get()
+            self.data_model.cost_v2_params['pv_green_cert'] = self.v2_pv_green_cert_var.get()
+            self.data_model.cost_v2_params['pv_other_fixed'] = self.v2_pv_other_fixed_var.get()
+            self.data_model.cost_v2_params['pv_other_variable'] = self.v2_pv_other_variable_var.get()
+            
+            # ===== 3. 风电部分参数 =====
+            self.data_model.cost_v2_params['wind_power_cost'] = self.v2_wind_power_cost_var.get()
+            self.data_model.cost_v2_params['wind_other_material'] = self.v2_wind_other_material_var.get()
+            self.data_model.cost_v2_params['wind_direct_labor'] = self.v2_wind_direct_labor_var.get()
+            self.data_model.cost_v2_params['wind_mgmt_labor'] = self.v2_wind_mgmt_labor_var.get()
+            self.data_model.cost_v2_params['wind_maintenance'] = self.v2_wind_maintenance_var.get()
+            self.data_model.cost_v2_params['wind_depreciation'] = self.v2_wind_depreciation_var.get()
+            self.data_model.cost_v2_params['wind_other_manufacturing'] = self.v2_wind_other_manufacturing_var.get()
+            self.data_model.cost_v2_params['wind_reserve_fee'] = self.v2_wind_reserve_fee_var.get()
+            self.data_model.cost_v2_params['wind_government_fund'] = self.v2_wind_government_fund_var.get()
+            self.data_model.cost_v2_params['wind_policy_subsidy'] = self.v2_wind_policy_subsidy_var.get()
+            self.data_model.cost_v2_params['wind_sale_price'] = self.v2_wind_sale_price_var.get()
+            self.data_model.cost_v2_params['wind_other_fixed'] = self.v2_wind_other_fixed_var.get()
+            self.data_model.cost_v2_params['wind_other_variable'] = self.v2_wind_other_variable_var.get()
+            
+            # ===== 4. 下网部分参数 =====
+            self.data_model.cost_v2_params['grid_base_cost'] = self.v2_grid_base_cost_var.get()
+            self.data_model.cost_v2_params['grid_transmission'] = self.v2_grid_transmission_var.get()
+            self.data_model.cost_v2_params['grid_line_loss'] = self.v2_grid_line_loss_var.get()
+            self.data_model.cost_v2_params['grid_operation'] = self.v2_grid_operation_var.get()
+            self.data_model.cost_v2_params['grid_government_fund'] = self.v2_grid_government_fund_var.get()
+            
+            # 保存项目数据
+            self.save_current_project()
+            
+            messagebox.showinfo("成功", "成本分析 2.0 参数已保存！")
+            
+        except Exception as e:
+            messagebox.showerror("错误", f"保存成本分析 2.0 参数失败：{str(e)}")
+    
+    def load_v2_cost_parameters(self):
+        """
+        从数据模型加载成本分析 2.0 参数到 UI
+        """
+        try:
+            # 检查是否存在 v2 参数
+            if not hasattr(self.data_model, 'cost_v2_params') or not self.data_model.cost_v2_params:
+                return  # 没有保存的参数，使用默认值
+            
+            params = self.data_model.cost_v2_params
+            
+            # ===== 1. 火电部分参数 =====
+            # 直接材料
+            if 'thermal_coal_price' in params:
+                self.v2_thermal_coal_price_var.set(params['thermal_coal_price'])
+            if 'thermal_base_coal' in params:
+                self.v2_thermal_base_coal_var.set(params['thermal_base_coal'])
+            if 'thermal_pure_water_cost' in params:
+                self.v2_thermal_pure_water_cost_var.set(params['thermal_pure_water_cost'])
+            if 'thermal_pure_water_unit' in params:
+                self.v2_thermal_pure_water_unit_var.set(params['thermal_pure_water_unit'])
+            
+            # 直接人工
+            if 'thermal_direct_labor' in params:
+                self.v2_thermal_direct_labor_var.set(params['thermal_direct_labor'])
+            
+            # 制造费用
+            if 'thermal_mgmt_labor' in params:
+                self.v2_thermal_mgmt_labor_var.set(params['thermal_mgmt_labor'])
+            if 'thermal_maintenance' in params:
+                self.v2_thermal_maintenance_var.set(params['thermal_maintenance'])
+            if 'thermal_depreciation' in params:
+                self.v2_thermal_depreciation_var.set(params['thermal_depreciation'])
+            if 'thermal_other_manufacturing' in params:
+                self.v2_thermal_other_manufacturing_var.set(params['thermal_other_manufacturing'])
+            
+            # 备容与政府基金
+            if 'thermal_reserve_fee_mode' in params:
+                self.v2_thermal_reserve_fee_mode_var.set(params['thermal_reserve_fee_mode'])
+            if 'thermal_reserve_fee_unit' in params:
+                self.v2_thermal_reserve_fee_unit_var.set(params['thermal_reserve_fee_unit'])
+            if 'thermal_reserve_fee_total' in params:
+                self.v2_thermal_reserve_fee_total_var.set(params['thermal_reserve_fee_total'])
+            if 'thermal_government_fund' in params:
+                self.v2_thermal_government_fund_var.set(params['thermal_government_fund'])
+            if 'thermal_policy_subsidy' in params:
+                self.v2_thermal_policy_subsidy_var.set(params['thermal_policy_subsidy'])
+            
+            # 碳排放和绿证
+            if 'thermal_carbon_intensity' in params:
+                self.v2_thermal_carbon_intensity_var.set(params['thermal_carbon_intensity'])
+            if 'thermal_heat_value' in params:
+                self.v2_thermal_heat_value_var.set(params['thermal_heat_value'])
+            if 'thermal_carbon_content' in params:
+                self.v2_thermal_carbon_content_var.set(params['thermal_carbon_content'])
+            if 'thermal_carbon_price' in params:
+                self.v2_thermal_carbon_price_var.set(params['thermal_carbon_price'])
+            if 'thermal_green_ratio' in params:
+                self.v2_thermal_green_ratio_var.set(params['thermal_green_ratio'])
+            
+            # 其他成本
+            if 'thermal_other_fixed' in params:
+                self.v2_thermal_other_fixed_var.set(params['thermal_other_fixed'])
+            if 'thermal_other_variable' in params:
+                self.v2_thermal_other_variable_var.set(params['thermal_other_variable'])
+            
+            # 煤耗曲线参数
+            if 'thermal_coal_quadratic' in params and hasattr(self, 'v2_thermal_curve_quadratic'):
+                self.v2_thermal_curve_quadratic.set(params['thermal_coal_quadratic'])
+            if 'thermal_coal_linear' in params and hasattr(self, 'v2_thermal_curve_linear'):
+                self.v2_thermal_curve_linear.set(params['thermal_coal_linear'])
+            if 'thermal_coal_constant' in params and hasattr(self, 'v2_thermal_curve_constant'):
+                self.v2_thermal_curve_constant.set(params['thermal_coal_constant'])
+            
+            # ===== 2. 光伏部分参数 =====
+            if 'pv_power_cost' in params:
+                self.v2_pv_power_cost_var.set(params['pv_power_cost'])
+            if 'pv_other_material' in params:
+                self.v2_pv_other_material_var.set(params['pv_other_material'])
+            if 'pv_direct_labor' in params:
+                self.v2_pv_direct_labor_var.set(params['pv_direct_labor'])
+            if 'pv_mgmt_labor' in params:
+                self.v2_pv_mgmt_labor_var.set(params['pv_mgmt_labor'])
+            if 'pv_maintenance' in params:
+                self.v2_pv_maintenance_var.set(params['pv_maintenance'])
+            if 'pv_depreciation' in params:
+                self.v2_pv_depreciation_var.set(params['pv_depreciation'])
+            if 'pv_other_manufacturing' in params:
+                self.v2_pv_other_manufacturing_var.set(params['pv_other_manufacturing'])
+            if 'pv_reserve_fee' in params:
+                self.v2_pv_reserve_fee_var.set(params['pv_reserve_fee'])
+            if 'pv_government_fund' in params:
+                self.v2_pv_government_fund_var.set(params['pv_government_fund'])
+            if 'pv_policy_subsidy' in params:
+                self.v2_pv_policy_subsidy_var.set(params['pv_policy_subsidy'])
+            if 'pv_sale_price' in params:
+                self.v2_pv_sale_price_var.set(params['pv_sale_price'])
+            if 'pv_green_cert' in params:
+                self.v2_pv_green_cert_var.set(params['pv_green_cert'])
+            if 'pv_other_fixed' in params:
+                self.v2_pv_other_fixed_var.set(params['pv_other_fixed'])
+            if 'pv_other_variable' in params:
+                self.v2_pv_other_variable_var.set(params['pv_other_variable'])
+            
+            # ===== 3. 风电部分参数 =====
+            if 'wind_power_cost' in params:
+                self.v2_wind_power_cost_var.set(params['wind_power_cost'])
+            if 'wind_other_material' in params:
+                self.v2_wind_other_material_var.set(params['wind_other_material'])
+            if 'wind_direct_labor' in params:
+                self.v2_wind_direct_labor_var.set(params['wind_direct_labor'])
+            if 'wind_mgmt_labor' in params:
+                self.v2_wind_mgmt_labor_var.set(params['wind_mgmt_labor'])
+            if 'wind_maintenance' in params:
+                self.v2_wind_maintenance_var.set(params['wind_maintenance'])
+            if 'wind_depreciation' in params:
+                self.v2_wind_depreciation_var.set(params['wind_depreciation'])
+            if 'wind_other_manufacturing' in params:
+                self.v2_wind_other_manufacturing_var.set(params['wind_other_manufacturing'])
+            if 'wind_reserve_fee' in params:
+                self.v2_wind_reserve_fee_var.set(params['wind_reserve_fee'])
+            if 'wind_government_fund' in params:
+                self.v2_wind_government_fund_var.set(params['wind_government_fund'])
+            if 'wind_policy_subsidy' in params:
+                self.v2_wind_policy_subsidy_var.set(params['wind_policy_subsidy'])
+            if 'wind_sale_price' in params:
+                self.v2_wind_sale_price_var.set(params['wind_sale_price'])
+            if 'wind_other_fixed' in params:
+                self.v2_wind_other_fixed_var.set(params['wind_other_fixed'])
+            if 'wind_other_variable' in params:
+                self.v2_wind_other_variable_var.set(params['wind_other_variable'])
+            
+            # ===== 4. 下网部分参数 =====
+            if 'grid_base_cost' in params:
+                self.v2_grid_base_cost_var.set(params['grid_base_cost'])
+            if 'grid_transmission' in params:
+                self.v2_grid_transmission_var.set(params['grid_transmission'])
+            if 'grid_line_loss' in params:
+                self.v2_grid_line_loss_var.set(params['grid_line_loss'])
+            if 'grid_operation' in params:
+                self.v2_grid_operation_var.set(params['grid_operation'])
+            if 'grid_government_fund' in params:
+                self.v2_grid_government_fund_var.set(params['grid_government_fund'])
+            
+        except Exception as e:
+            print(f"加载成本分析 2.0 参数失败：{str(e)}")
     
     def on_mouse_wheel_data(self, event):
         """
@@ -7894,7 +8133,7 @@ class EnergyBalanceApp:
         # === 风电列 ===
         wind_row = 0
         
-        # 风电 - 使用类似的分组，但没有绿证输入
+        # 风电 - 直接材料
         wind_material_frame = ttk.LabelFrame(wind_col, text="直接材料", padding=5)
         wind_material_frame.grid(row=wind_row, column=0, sticky=(tk.W, tk.E), pady=3)
         wind_row += 1
@@ -7907,8 +8146,76 @@ class EnergyBalanceApp:
         self.v2_wind_other_material_var = tk.DoubleVar(value=200.0)
         ttk.Entry(wind_material_frame, textvariable=self.v2_wind_other_material_var, width=12).grid(row=1, column=1, pady=2, padx=3)
         
-        # ... 类似光伏的其他分组，这里简化处理
-        ttk.Label(wind_col, text="(风电参数配置与光伏类似)", foreground="gray").grid(row=wind_row, column=0, pady=20)
+        # 风电 - 直接人工
+        wind_labor_frame = ttk.LabelFrame(wind_col, text="直接人工", padding=5)
+        wind_labor_frame.grid(row=wind_row, column=0, sticky=(tk.W, tk.E), pady=3)
+        wind_row += 1
+        
+        ttk.Label(wind_labor_frame, text="直接人工 (万元):").grid(row=0, column=0, sticky=tk.W, pady=2, padx=3)
+        self.v2_wind_direct_labor_var = tk.DoubleVar(value=4000.0)
+        ttk.Entry(wind_labor_frame, textvariable=self.v2_wind_direct_labor_var, width=12).grid(row=0, column=1, pady=2, padx=3)
+        
+        # 风电 - 制造费用
+        wind_manufacturing_frame = ttk.LabelFrame(wind_col, text="制造费用", padding=5)
+        wind_manufacturing_frame.grid(row=wind_row, column=0, sticky=(tk.W, tk.E), pady=3)
+        wind_row += 1
+        
+        ttk.Label(wind_manufacturing_frame, text="管理人工 (万元):").grid(row=0, column=0, sticky=tk.W, pady=2, padx=3)
+        self.v2_wind_mgmt_labor_var = tk.DoubleVar(value=1000.0)
+        ttk.Entry(wind_manufacturing_frame, textvariable=self.v2_wind_mgmt_labor_var, width=12).grid(row=0, column=1, pady=2, padx=3)
+        
+        ttk.Label(wind_manufacturing_frame, text="运维费用 (万元):").grid(row=1, column=0, sticky=tk.W, pady=2, padx=3)
+        self.v2_wind_maintenance_var = tk.DoubleVar(value=1000.0)
+        ttk.Entry(wind_manufacturing_frame, textvariable=self.v2_wind_maintenance_var, width=12).grid(row=1, column=1, pady=2, padx=3)
+        
+        ttk.Label(wind_manufacturing_frame, text="折旧及摊销 (万元):").grid(row=2, column=0, sticky=tk.W, pady=2, padx=3)
+        self.v2_wind_depreciation_var = tk.DoubleVar(value=5000.0)
+        ttk.Entry(wind_manufacturing_frame, textvariable=self.v2_wind_depreciation_var, width=12).grid(row=2, column=1, pady=2, padx=3)
+        
+        ttk.Label(wind_manufacturing_frame, text="其他制造费 (万元):").grid(row=3, column=0, sticky=tk.W, pady=2, padx=3)
+        self.v2_wind_other_manufacturing_var = tk.DoubleVar(value=500.0)
+        ttk.Entry(wind_manufacturing_frame, textvariable=self.v2_wind_other_manufacturing_var, width=12).grid(row=3, column=1, pady=2, padx=3)
+        
+        # 风电 - 备容与政府基金
+        wind_reserve_frame = ttk.LabelFrame(wind_col, text="备容与政府基金", padding=5)
+        wind_reserve_frame.grid(row=wind_row, column=0, sticky=(tk.W, tk.E), pady=3)
+        wind_row += 1
+        
+        ttk.Label(wind_reserve_frame, text="备容费单价 (元/kWh):").grid(row=0, column=0, sticky=tk.W, pady=2, padx=3)
+        self.v2_wind_reserve_fee_var = tk.DoubleVar(value=0.028)
+        ttk.Entry(wind_reserve_frame, textvariable=self.v2_wind_reserve_fee_var, width=12).grid(row=0, column=1, pady=2, padx=3)
+        
+        ttk.Label(wind_reserve_frame, text="政府性基金 (元/kWh):").grid(row=1, column=0, sticky=tk.W, pady=2, padx=3)
+        self.v2_wind_government_fund_var = tk.DoubleVar(value=0.03)
+        ttk.Entry(wind_reserve_frame, textvariable=self.v2_wind_government_fund_var, width=12).grid(row=1, column=1, pady=2, padx=3)
+        
+        ttk.Label(wind_reserve_frame, text="政策性交叉补贴 (元/kWh):").grid(row=2, column=0, sticky=tk.W, pady=2, padx=3)
+        self.v2_wind_policy_subsidy_var = tk.DoubleVar(value=0.0129)
+        ttk.Entry(wind_reserve_frame, textvariable=self.v2_wind_policy_subsidy_var, width=12).grid(row=2, column=1, pady=2, padx=3)
+        
+        # 风电 - 销售电价
+        wind_price_frame = ttk.LabelFrame(wind_col, text="销售电价", padding=5)
+        wind_price_frame.grid(row=wind_row, column=0, sticky=(tk.W, tk.E), pady=3)
+        wind_row += 1
+        
+        ttk.Label(wind_price_frame, text="销售电价 (元/kWh):").grid(row=0, column=0, sticky=tk.W, pady=2, padx=3)
+        self.v2_wind_sale_price_var = tk.DoubleVar(value=0.3)
+        ttk.Entry(wind_price_frame, textvariable=self.v2_wind_sale_price_var, width=12).grid(row=0, column=1, pady=2, padx=3)
+        
+        # 注意：风电没有绿证输入，这是与光伏的唯一区别
+        
+        # 风电 - 其他成本
+        wind_other_frame = ttk.LabelFrame(wind_col, text="其他成本", padding=5)
+        wind_other_frame.grid(row=wind_row, column=0, sticky=(tk.W, tk.E), pady=3)
+        wind_row += 1
+        
+        ttk.Label(wind_other_frame, text="其他固定成本 (万元):").grid(row=0, column=0, sticky=tk.W, pady=2, padx=3)
+        self.v2_wind_other_fixed_var = tk.DoubleVar(value=0.0)
+        ttk.Entry(wind_other_frame, textvariable=self.v2_wind_other_fixed_var, width=12).grid(row=0, column=1, pady=2, padx=3)
+        
+        ttk.Label(wind_other_frame, text="其他可变成本 (元/kWh):").grid(row=1, column=0, sticky=tk.W, pady=2, padx=3)
+        self.v2_wind_other_variable_var = tk.DoubleVar(value=0.0)
+        ttk.Entry(wind_other_frame, textvariable=self.v2_wind_other_variable_var, width=12).grid(row=1, column=1, pady=2, padx=3)
         
         # 配置权重
         pv_col.columnconfigure(0, weight=1)
