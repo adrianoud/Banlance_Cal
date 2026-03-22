@@ -7743,10 +7743,10 @@ class EnergyBalanceApp:
                                 transform=self.v2_cost_ax.transAxes, fontsize=12)
             self.v2_cost_canvas.draw()
     
-    def update_v2_cost_summary_table(self, results):
+    def update_v2_cost_summary_table(self, calc_results):
         """
         更新成本分析 2.0 汇总表格
-        :param results: 计算结果字典
+        :param calc_results: 计算结果字典（包含 thermal, pv, wind, grid, summary）
         """
         try:
             # 清空现有数据
@@ -7786,7 +7786,7 @@ class EnergyBalanceApp:
             total_grid_energy_wan = total_grid_energy / 10000.0  # 万度
             
             # 8. 火电出力
-            total_thermal_generation = results['thermal']['total_energy']
+            total_thermal_generation = calc_results['thermal']['total_energy']
             total_thermal_generation_wan = total_thermal_generation / 10000.0  # 万度
             
             # 9. 火电供电量 = 火电出力 - 厂用电
@@ -7800,14 +7800,14 @@ class EnergyBalanceApp:
             summary_data.extend([
                 ('═══ 一、整体情况 ═══', '', ''),
                 ('总电量（含厂用电）', f"{total_energy_with_internal_wan:.1f} 万度", ''),
-                ('总生产成本', f"{results['summary']['total_cost']:.2f} 万元", ''),
-                ('综合单位成本', f"{(results['summary']['total_cost']*10000)/total_energy_with_internal:.4f} 元/kWh" if total_energy_with_internal > 0 else 'N/A', ''),
+                ('总生产成本', f"{calc_results['summary']['total_cost']:.2f} 万元", ''),
+                ('综合单位成本', f"{(calc_results['summary']['total_cost']*10000)/total_energy_with_internal:.4f} 元/kWh" if total_energy_with_internal > 0 else 'N/A', ''),
             ])
             
             # ========== 二、园区部分 ==========
             # 计算园区总用电成本
-            thermal_cost = results['thermal']['total_cost']
-            grid_cost = results['grid']['total_cost']
+            thermal_cost = calc_results['thermal']['total_cost']
+            grid_cost = calc_results['grid']['total_cost']
             
             # 新能源用电成本 = 光伏销售电价 × 光伏消纳电量 + 风机销售电价 × 风机消纳电量
             params = self.data_model.cost_v2_params if hasattr(self.data_model, 'cost_v2_params') else {}
@@ -7832,8 +7832,8 @@ class EnergyBalanceApp:
             # 绿电占比 = (光伏 + 风电实际发电量) / 总用电量 × 100%
             green_power_ratio = (total_pv_generation + total_wind_generation) / total_energy_with_internal * 100 if total_energy_with_internal > 0 else 0.0
             
-            # 绿证购买费用（来自火电成本计算）
-            green_cert_cost = results['thermal'].get('green_cert_cost', 0.0)
+            # 绿证购买费用（净费用）- 火电不再购买，只显示新能源抵扣
+            green_cert_cost = calc_results['summary'].get('net_green_cert_cost', 0.0)
             
             summary_data.extend([
                 ('', '', ''),
@@ -7848,29 +7848,34 @@ class EnergyBalanceApp:
             ])
             
             # ========== 三、火电部分 ==========
-            # 从 results 中提取详细成本分项
-            thermal = results['thermal']
+            # 从 calc_results 中提取详细成本分项
+            thermal = calc_results['thermal']
             
             # 计算直接材料、直接人工、制造费用
             params = self.data_model.cost_v2_params if hasattr(self.data_model, 'cost_v2_params') else {}
             
-            # 直接材料 = 燃料成本 + 纯水及其他
-            direct_material_cost = thermal['variable_cost'] * 0.7  # 估算：燃料占可变成本的 70%
-            pure_water_cost = params.get('thermal_pure_water_cost', 100.0)  # 固定部分
-            direct_material_total = direct_material_cost + pure_water_cost
+            # 直接材料 = 燃料成本 + 纯水及其他（固定 + 可变）
+            # 注意：thermal['variable_cost'] 包含燃料、纯水可变、政府基金、政策补贴、容量费等
+            # 这里简化处理：将可变成本视为直接材料（实际上包含了多项内容）
+            direct_material_cost = thermal['variable_cost']  # 万元（包含燃料及所有可变成本）
+            pure_water_fixed = params.get('thermal_pure_water_cost', 100.0)  # 万元（固定部分）
+            direct_material_total = direct_material_cost + pure_water_fixed
             
-            # 直接人工
-            direct_labor_cost = params.get('thermal_direct_labor', 4000.0)
+            # 直接人工（固定）
+            direct_labor_cost = params.get('thermal_direct_labor', 4000.0)  # 万元
             
-            # 制造费用
+            # 制造费用（固定）= 管理人工 + 运维 + 折旧 + 其他制造 + 其他固定
             mgmt_labor = params.get('thermal_mgmt_labor', 1000.0)
             maintenance = params.get('thermal_maintenance', 1000.0)
             depreciation = params.get('thermal_depreciation', 8000.0)
             other_manufacturing = params.get('thermal_other_manufacturing', 500.0)
-            manufacturing_total = mgmt_labor + maintenance + depreciation + other_manufacturing
+            other_fixed = params.get('thermal_other_fixed', 0.0)
+            manufacturing_total = mgmt_labor + maintenance + depreciation + other_manufacturing + other_fixed
             
             # 火电到户电价
-            thermal_unit_price = thermal['total_cost'] / thermal_supply_energy_wan * 10000 if thermal_supply_energy_wan > 0 else 0.0
+            # thermal['total_cost'] 单位：万元，thermal_supply_energy_wan 单位：万度
+            # 元/kWh = 万元 × 10000 / (万度 × 10000) = 万元 / 万度
+            thermal_unit_price = thermal['total_cost'] / thermal_supply_energy_wan if thermal_supply_energy_wan > 0 else 0.0
             
             # 碳排放盈亏量
             base_coal = params.get('thermal_base_coal', 500.0)  # g/kWh
@@ -7903,12 +7908,14 @@ class EnergyBalanceApp:
             ])
             
             # ========== 四、新能源部分 ==========
-            pv = results['pv']
-            wind = results['wind']
+            pv = calc_results['pv']
+            wind = calc_results['wind']
             renewable_total_cost = pv['total_cost'] + wind['total_cost']
             
             # 新能源单位成本
-            renewable_unit_cost = renewable_total_cost / total_renewable_actual_wan * 10000 if total_renewable_actual_wan > 0 else 0.0
+            # renewable_total_cost 单位：万元，total_renewable_actual_wan 单位：万度
+            # 元/kWh = 万元 × 10000 / (万度 × 10000) = 万元 / 万度
+            renewable_unit_cost = renewable_total_cost / total_renewable_actual_wan if total_renewable_actual_wan > 0 else 0.0
             
             # 弃电率
             total_renewable_generation = total_pv_generation + total_wind_generation
@@ -7938,8 +7945,10 @@ class EnergyBalanceApp:
             ])
             
             # ========== 五、下网电部分 ==========
-            grid = results['grid']
-            grid_unit_price = grid['total_cost'] / total_grid_energy_wan * 10000 if total_grid_energy_wan > 0 else 0.0
+            grid = calc_results['grid']
+            # grid['total_cost'] 单位：万元，total_grid_energy_wan 单位：万度
+            # 元/kWh = 万元 × 10000 / (万度 × 10000) = 万元 / 万度
+            grid_unit_price = grid['total_cost'] / total_grid_energy_wan if total_grid_energy_wan > 0 else 0.0
             
             summary_data.extend([
                 ('', '', ''),
@@ -8669,40 +8678,20 @@ class EnergyBalanceApp:
         ttk.Entry(green_cert_frame, textvariable=self.v2_green_cert_price_var, width=15).grid(row=0, column=1, pady=3, padx=5)
         ttk.Label(green_cert_frame, text="(光伏、风电共用)", foreground="gray").grid(row=1, column=0, columnspan=2, sticky=tk.W, padx=5)
         
-        # 配置权重 - 调整列宽比例，使三列占满屏幕
-        top_input_frame.columnconfigure(0, weight=3)  # 火电成本（更宽）
-        top_input_frame.columnconfigure(1, weight=3)  # 新能源成本（更宽）
-        top_input_frame.columnconfigure(2, weight=2)  # 下网成本（稍窄）
+        # 配置权重 - 调整列宽比例，使四列占满屏幕
+        top_input_frame.columnconfigure(0, weight=2)  # 火电成本
+        top_input_frame.columnconfigure(1, weight=2)  # 新能源成本
+        top_input_frame.columnconfigure(2, weight=2)  # 下网成本
+        top_input_frame.columnconfigure(3, weight=3)  # 年度汇总（更宽）
         top_input_frame.rowconfigure(0, weight=1)
         
-        # ===== 下方结果展示区域（增加高度以保证显示完整） =====
-        bottom_result_frame = ttk.Frame(tab)
-        bottom_result_frame.grid(row=3, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(5, 0))
-        
-        # 左侧：8760 小时趋势图（增加默认高度）
-        left_plot_frame = ttk.LabelFrame(bottom_result_frame, text="8760 小时发电出力及下网负荷趋势", padding=5)
-        left_plot_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(0, 5))
-        
-        # 创建 matplotlib 图形（调整尺寸以适应更大空间）
-        self.v2_cost_figure = Figure(figsize=(10, 7), dpi=100)
-        self.v2_cost_ax = self.v2_cost_figure.add_subplot(111)
-        self.v2_cost_canvas = FigureCanvasTkAgg(self.v2_cost_figure, left_plot_frame)
-        self.v2_cost_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True, pady=5)
-        
-        # 初始化图表
-        self.v2_cost_ax.text(0.5, 0.5, '暂无数据\n请先进行平衡计算', 
-                             horizontalalignment='center', verticalalignment='center',
-                             transform=self.v2_cost_ax.transAxes, fontsize=12)
-        self.v2_cost_ax.set_title('8760 小时发电出力及下网负荷趋势')
-        self.v2_cost_canvas.draw()
-        
-        # 右侧：年度汇总值（增加行高以显示更多条目，改为 3 列显示）
-        right_summary_frame = ttk.LabelFrame(bottom_result_frame, text="年度汇总", padding=5)
-        right_summary_frame.grid(row=0, column=1, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(5, 0))
+        # ===== 年度汇总表格（放在下网成本右边，占据整个高度） =====
+        right_summary_frame = ttk.LabelFrame(top_input_frame, text="年度汇总", padding=5)
+        right_summary_frame.grid(row=0, column=3, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(5, 0))
         
         # 年度汇总表格 - 三列：项目、数值、备注
         columns = ('项目', '数值', '备注')
-        self.v2_summary_tree = ttk.Treeview(right_summary_frame, columns=columns, show='headings', height=20)
+        self.v2_summary_tree = ttk.Treeview(right_summary_frame, columns=columns, show='headings', height=25)
         self.v2_summary_tree.heading('项目', text='项目')
         self.v2_summary_tree.heading('数值', text='数值')
         self.v2_summary_tree.heading('备注', text='备注')
@@ -8720,14 +8709,35 @@ class EnergyBalanceApp:
         # 初始化汇总数据
         self.init_v2_cost_summary()
         
+        right_summary_frame.columnconfigure(0, weight=1)
+        right_summary_frame.rowconfigure(0, weight=1)
+        
+        # ===== 下方结果展示区域（8760 小时图表） =====
+        bottom_result_frame = ttk.Frame(tab)
+        bottom_result_frame.grid(row=4, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(5, 0))
+        
+        # 左侧：8760 小时趋势图
+        left_plot_frame = ttk.LabelFrame(bottom_result_frame, text="8760 小时发电出力及下网负荷趋势", padding=5)
+        left_plot_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(0, 5))
+        
+        # 创建 matplotlib 图形（调整尺寸以适应更大空间）
+        self.v2_cost_figure = Figure(figsize=(12, 6), dpi=100)
+        self.v2_cost_ax = self.v2_cost_figure.add_subplot(111)
+        self.v2_cost_canvas = FigureCanvasTkAgg(self.v2_cost_figure, left_plot_frame)
+        self.v2_cost_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True, pady=5)
+        
+        # 初始化图表
+        self.v2_cost_ax.text(0.5, 0.5, '暂无数据\n请先进行平衡计算', 
+                             horizontalalignment='center', verticalalignment='center',
+                             transform=self.v2_cost_ax.transAxes, fontsize=12)
+        self.v2_cost_ax.set_title('8760 小时发电出力及下网负荷趋势')
+        self.v2_cost_canvas.draw()
+        
         # 配置权重
-        bottom_result_frame.columnconfigure(0, weight=2)
-        bottom_result_frame.columnconfigure(1, weight=1)
+        bottom_result_frame.columnconfigure(0, weight=1)
         bottom_result_frame.rowconfigure(0, weight=1)
         left_plot_frame.columnconfigure(0, weight=1)
         left_plot_frame.rowconfigure(0, weight=1)
-        right_summary_frame.columnconfigure(0, weight=1)
-        right_summary_frame.rowconfigure(0, weight=1)
 
 
 def main():
