@@ -7753,68 +7753,210 @@ class EnergyBalanceApp:
             for item in self.v2_summary_tree.get_children():
                 self.v2_summary_tree.delete(item)
             
-            # 构建汇总数据
+            # 获取平衡计算结果用于统计
+            balance_results = self.results
+            
+            # 计算基础统计数据
+            # 1. 总电量（含厂用电）
+            total_energy_with_internal = np.sum(balance_results['hourly_total_load']) if 'hourly_total_load' in balance_results else 0.0
+            total_energy_with_internal_wan = total_energy_with_internal / 10000.0  # 万度
+            
+            # 2. 厂用电量
+            total_internal_energy = np.sum(balance_results['hourly_internal_electric_load']) if 'hourly_internal_electric_load' in balance_results else 0.0
+            total_internal_energy_wan = total_internal_energy / 10000.0  # 万度
+            
+            # 3. 园区负荷用电量（总电量 - 厂用电）
+            park_energy_consumption = total_energy_with_internal - total_internal_energy
+            park_energy_consumption_wan = park_energy_consumption / 10000.0  # 万度
+            
+            # 4. 光伏发电量
+            total_pv_generation = np.sum(balance_results['hourly_pv_output']) if 'hourly_pv_output' in balance_results else 0.0
+            total_pv_generation_wan = total_pv_generation / 10000.0  # 万度
+            
+            # 5. 风电发电量
+            total_wind_generation = np.sum(balance_results['hourly_wind_output']) if 'hourly_wind_output' in balance_results else 0.0
+            total_wind_generation_wan = total_wind_generation / 10000.0  # 万度
+            
+            # 6. 新能源实际发电量（消纳电量）
+            total_renewable_actual = np.sum(balance_results['hourly_wind_pv_actual']) if 'hourly_wind_pv_actual' in balance_results else 0.0
+            total_renewable_actual_wan = total_renewable_actual / 10000.0  # 万度
+            
+            # 7. 下网电量
+            total_grid_energy = np.sum(balance_results['hourly_grid_load']) if 'hourly_grid_load' in balance_results else 0.0
+            total_grid_energy_wan = total_grid_energy / 10000.0  # 万度
+            
+            # 8. 火电出力
+            total_thermal_generation = results['thermal']['total_energy']
+            total_thermal_generation_wan = total_thermal_generation / 10000.0  # 万度
+            
+            # 9. 火电供电量 = 火电出力 - 厂用电
+            thermal_supply_energy = total_thermal_generation - total_internal_energy
+            thermal_supply_energy_wan = thermal_supply_energy / 10000.0  # 万度
+            
+            # ===== 构建汇总数据（分多列显示） =====
             summary_data = []
             
-            # ===== 火电部分 =====
+            # ========== 一、整体情况 ==========
+            summary_data.extend([
+                ('═══ 一、整体情况 ═══', '', ''),
+                ('总电量（含厂用电）', f"{total_energy_with_internal_wan:.1f} 万度", ''),
+                ('总生产成本', f"{results['summary']['total_cost']:.2f} 万元", ''),
+                ('综合单位成本', f"{(results['summary']['total_cost']*10000)/total_energy_with_internal:.4f} 元/kWh" if total_energy_with_internal > 0 else 'N/A', ''),
+            ])
+            
+            # ========== 二、园区部分 ==========
+            # 计算园区总用电成本
+            thermal_cost = results['thermal']['total_cost']
+            grid_cost = results['grid']['total_cost']
+            
+            # 新能源用电成本 = 光伏销售电价 × 光伏消纳电量 + 风机销售电价 × 风机消纳电量
+            params = self.data_model.cost_v2_params if hasattr(self.data_model, 'cost_v2_params') else {}
+            pv_sale_price = params.get('pv_sale_price', 0.3)  # 元/kWh
+            wind_sale_price = params.get('wind_sale_price', 0.3)  # 元/kWh
+            
+            # 假设光伏和风电按发电量比例消纳
+            if total_renewable_actual > 0:
+                pv_ratio = total_pv_generation / (total_pv_generation + total_wind_generation) if (total_pv_generation + total_wind_generation) > 0 else 0.5
+                wind_ratio = 1 - pv_ratio
+                pv_consumption = total_renewable_actual * pv_ratio
+                wind_consumption = total_renewable_actual * wind_ratio
+            else:
+                pv_consumption = 0.0
+                wind_consumption = 0.0
+            
+            renewable_electricity_cost_yuan = pv_consumption * pv_sale_price + wind_consumption * wind_sale_price
+            renewable_electricity_cost_wan = renewable_electricity_cost_yuan / 10000.0
+            
+            park_total_cost = thermal_cost + grid_cost + renewable_electricity_cost_wan
+            
+            # 绿电占比 = (光伏 + 风电实际发电量) / 总用电量 × 100%
+            green_power_ratio = (total_pv_generation + total_wind_generation) / total_energy_with_internal * 100 if total_energy_with_internal > 0 else 0.0
+            
+            # 绿证购买费用（来自火电成本计算）
+            green_cert_cost = results['thermal'].get('green_cert_cost', 0.0)
+            
+            summary_data.extend([
+                ('', '', ''),
+                ('═══ 二、园区部分 ═══', '', ''),
+                ('园区负荷用电量', f"{park_energy_consumption_wan:.1f} 万度", ''),
+                ('总用电成本', f"{park_total_cost:.2f} 万元", ''),
+                ('  └─ 火电成本', f"{thermal_cost:.2f} 万元", ''),
+                ('  └─ 下网成本', f"{grid_cost:.2f} 万元", ''),
+                ('  └─ 新能源用电成本', f"{renewable_electricity_cost_wan:.2f} 万元", ''),
+                ('绿电占比', f"{green_power_ratio:.2f}%", ''),
+                ('绿证购买费用', f"{green_cert_cost:.2f} 万元", ''),
+            ])
+            
+            # ========== 三、火电部分 ==========
+            # 从 results 中提取详细成本分项
             thermal = results['thermal']
+            
+            # 计算直接材料、直接人工、制造费用
+            params = self.data_model.cost_v2_params if hasattr(self.data_model, 'cost_v2_params') else {}
+            
+            # 直接材料 = 燃料成本 + 纯水及其他
+            direct_material_cost = thermal['variable_cost'] * 0.7  # 估算：燃料占可变成本的 70%
+            pure_water_cost = params.get('thermal_pure_water_cost', 100.0)  # 固定部分
+            direct_material_total = direct_material_cost + pure_water_cost
+            
+            # 直接人工
+            direct_labor_cost = params.get('thermal_direct_labor', 4000.0)
+            
+            # 制造费用
+            mgmt_labor = params.get('thermal_mgmt_labor', 1000.0)
+            maintenance = params.get('thermal_maintenance', 1000.0)
+            depreciation = params.get('thermal_depreciation', 8000.0)
+            other_manufacturing = params.get('thermal_other_manufacturing', 500.0)
+            manufacturing_total = mgmt_labor + maintenance + depreciation + other_manufacturing
+            
+            # 火电到户电价
+            thermal_unit_price = thermal['total_cost'] / thermal_supply_energy_wan * 10000 if thermal_supply_energy_wan > 0 else 0.0
+            
+            # 碳排放盈亏量
+            base_coal = params.get('thermal_base_coal', 500.0)  # g/kWh
+            heat_value = params.get('thermal_heat_value', 19.5)  # MJ/kg
+            carbon_content = params.get('thermal_carbon_content', 0.0267)  # kg/MJ
+            carbon_intensity = params.get('thermal_carbon_intensity', 0.8049)  # kg/kWh
+            
+            carbon_emission_factor = (
+                base_coal / 1000.0 * carbon_content * heat_value * 0.99 * 44.0 / 12.0
+            )  # kg CO2/kWh
+            
+            carbon_balance_ton = (
+                total_thermal_generation * carbon_emission_factor / 1000.0 -  # 实际排放
+                total_thermal_generation * carbon_intensity / 1000.0  # 配额
+            )  # 吨
+            
+            carbon_cost = thermal.get('carbon_cost', 0.0)
+            
             summary_data.extend([
-                ('🔥 火电总成本', f"{thermal['total_cost']:.2f} 万元"),
-                ('  └─ 可变成本', f"{thermal['variable_cost']:.2f} 万元"),
-                ('  └─ 固定成本', f"{thermal['fixed_cost']:.2f} 万元"),
-                ('  └─ 碳排费用', f"{thermal['carbon_cost']:.2f} 万元"),
-                ('  └─ 绿证费用', f"{thermal['green_cert_cost']:.2f} 万元"),
-                ('  📊 度电成本', f"{thermal['unit_cost']:.4f} 元/kWh"),
-                ('  ⚡ 总出力', f"{int(thermal['total_energy']/10000)} 万度"),
+                ('', '', ''),
+                ('═══ 三、火电部分 ═══', '', ''),
+                ('火电供电量', f"{thermal_supply_energy_wan:.1f} 万度", ''),
+                ('火电总成本', f"{thermal['total_cost']:.2f} 万元", ''),
+                ('直接材料总成本', f"{direct_material_total:.2f} 万元", '(固定 + 可变)'),
+                ('直接人工总成本', f"{direct_labor_cost:.2f} 万元", '(固定)'),
+                ('制造费用总成本', f"{manufacturing_total:.2f} 万元", '(固定)'),
+                ('火电到户电价', f"{thermal_unit_price:.4f} 元/kWh", ''),
+                ('碳排放盈亏量', f"{carbon_balance_ton:.1f} 吨", '正为盈，负为亏'),
+                ('碳排放成本', f"{carbon_cost:.2f} 万元", ''),
             ])
             
-            # ===== 光伏部分 =====
+            # ========== 四、新能源部分 ==========
             pv = results['pv']
-            summary_data.extend([
-                ('☀️ 光伏总成本', f"{pv['total_cost']:.2f} 万元"),
-                ('  └─ 可变成本', f"{pv['variable_cost']:.2f} 万元"),
-                ('  └─ 固定成本', f"{pv['fixed_cost']:.2f} 万元"),
-                ('  └─ 绿证抵扣', f"-{pv['green_cert_income']:.2f} 万元"),
-                ('  📊 度电成本', f"{pv['unit_cost']:.4f} 元/kWh"),
-                ('  ⚡ 总出力', f"{int(pv['total_energy']/10000)} 万度"),
-            ])
-            
-            # ===== 风电部分 =====
             wind = results['wind']
+            renewable_total_cost = pv['total_cost'] + wind['total_cost']
+            
+            # 新能源单位成本
+            renewable_unit_cost = renewable_total_cost / total_renewable_actual_wan * 10000 if total_renewable_actual_wan > 0 else 0.0
+            
+            # 弃电率
+            total_renewable_generation = total_pv_generation + total_wind_generation
+            total_renewable_generation_wan = total_renewable_generation / 10000.0  # 万度
+            abandon_rate = (total_renewable_generation - total_renewable_actual) / total_renewable_generation * 100 if total_renewable_generation > 0 else 0.0
+            
+            # 新能源到户电价（加权平均）
+            renewable_sale_price = (pv_consumption * pv_sale_price + wind_consumption * wind_sale_price) / total_renewable_actual if total_renewable_actual > 0 else 0.0
+            
+            # 新能源绿证数量 = 消纳电量 / 1000
+            renewable_green_cert_count = int(total_renewable_actual / 1000)  # 取整
+            
+            # 平衡点电价 = 新能源单位成本
+            break_even_price = renewable_unit_cost
+            
             summary_data.extend([
-                ('💨 风电总成本', f"{wind['total_cost']:.2f} 万元"),
-                ('  └─ 可变成本', f"{wind['variable_cost']:.2f} 万元"),
-                ('  └─ 固定成本', f"{wind['fixed_cost']:.2f} 万元"),
-                ('  └─ 绿证抵扣', f"-{wind['green_cert_income']:.2f} 万元"),
-                ('  📊 度电成本', f"{wind['unit_cost']:.4f} 元/kWh"),
-                ('  ⚡ 总出力', f"{int(wind['total_energy']/10000)} 万度"),
+                ('', '', ''),
+                ('═══ 四、新能源部分 ═══', '', ''),
+                ('发电量', f"{total_renewable_generation_wan:.1f} 万度", ''),
+                ('消纳电量', f"{total_renewable_actual_wan:.1f} 万度", ''),
+                ('弃电率', f"{abandon_rate:.2f}%", ''),
+                ('新能源总成本', f"{renewable_total_cost:.2f} 万元", ''),
+                ('新能源单位成本', f"{renewable_unit_cost:.4f} 元/kWh", ''),
+                ('新能源到户电价', f"{renewable_sale_price:.4f} 元/kWh", ''),
+                ('新能源绿证数量', f"{renewable_green_cert_count} 个", ''),
+                ('平衡点电价', f"{break_even_price:.4f} 元/kWh", ''),
             ])
             
-            # ===== 下网部分 =====
+            # ========== 五、下网电部分 ==========
             grid = results['grid']
+            grid_unit_price = grid['total_cost'] / total_grid_energy_wan * 10000 if total_grid_energy_wan > 0 else 0.0
+            
             summary_data.extend([
-                ('⚡ 下网总成本', f"{grid['total_cost']:.2f} 万元"),
-                ('  └─ 变动成本', f"{grid['variable_cost']:.2f} 万元"),
-                ('  └─ 基本电费', f"{grid['base_cost']:.2f} 万元"),
-                ('  └─ 附加费用', f"{grid['additional_fees_cost']:.2f} 万元"),
-                ('  📊 度电成本', f"{grid['unit_cost']:.4f} 元/kWh"),
-                ('  ⚡ 总负荷', f"{int(grid['total_energy']/10000)} 万度"),
+                ('', '', ''),
+                ('═══ 五、下网电部分 ═══', '', ''),
+                ('下网电量', f"{total_grid_energy_wan:.1f} 万度", ''),
+                ('总下网电费', f"{grid['total_cost']:.2f} 万元", ''),
+                ('下网综合电价', f"{grid_unit_price:.4f} 元/kWh", ''),
             ])
             
-            # ===== 汇总 =====
-            summary = results['summary']
-            summary_data.extend([
-                ('━━━━━━━━━━━━━━━━━━━━', ''),
-                ('💰 总成本合计', f"{summary['total_cost']:.2f} 万元"),
-                ('📊 平均度电成本', f"{(summary['total_cost']*10000)/summary['total_energy']:.4f} 元/kWh" if summary['total_energy'] > 0 else 'N/A',),
-            ])
-            
-            # 插入到表格
-            for item, value in summary_data:
-                self.v2_summary_tree.insert('', tk.END, values=(item, value))
+            # 插入到表格（3 列显示）
+            for item in summary_data:
+                self.v2_summary_tree.insert('', tk.END, values=item)
             
         except Exception as e:
             print(f"更新汇总表格失败：{str(e)}")
+            import traceback
+            traceback.print_exc()
             messagebox.showerror("错误", f"更新汇总表格失败：{str(e)}")
     
     def update_v2_cost_analysis(self):
@@ -8554,17 +8696,19 @@ class EnergyBalanceApp:
         self.v2_cost_ax.set_title('8760 小时发电出力及下网负荷趋势')
         self.v2_cost_canvas.draw()
         
-        # 右侧：年度汇总值（增加行高以显示更多条目）
+        # 右侧：年度汇总值（增加行高以显示更多条目，改为 3 列显示）
         right_summary_frame = ttk.LabelFrame(bottom_result_frame, text="年度汇总", padding=5)
         right_summary_frame.grid(row=0, column=1, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(5, 0))
         
-        # 年度汇总表格 - 两列：项目、数值
-        columns = ('项目', '数值')
+        # 年度汇总表格 - 三列：项目、数值、备注
+        columns = ('项目', '数值', '备注')
         self.v2_summary_tree = ttk.Treeview(right_summary_frame, columns=columns, show='headings', height=20)
         self.v2_summary_tree.heading('项目', text='项目')
         self.v2_summary_tree.heading('数值', text='数值')
-        self.v2_summary_tree.column('项目', width=180)
+        self.v2_summary_tree.heading('备注', text='备注')
+        self.v2_summary_tree.column('项目', width=160)
         self.v2_summary_tree.column('数值', width=140)
+        self.v2_summary_tree.column('备注', width=100)
         
         # 添加滚动条
         summary_scrollbar = ttk.Scrollbar(right_summary_frame, orient=tk.VERTICAL, command=self.v2_summary_tree.yview)
