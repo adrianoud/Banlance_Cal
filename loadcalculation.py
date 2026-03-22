@@ -7501,7 +7501,9 @@ class EnergyBalanceApp:
         """
         dialog = tk.Toplevel(self.root)
         dialog.title("设置火电煤耗变化曲线")
-        dialog.geometry("500x400")
+        dialog.geometry("550x550")  # 继续增加高度以容纳按钮
+        dialog.transient(self.root)  # 设置为子窗口
+        dialog.grab_set()  # 模态对话框
         
         # 创建框架
         main_frame = ttk.Frame(dialog, padding="10")
@@ -7509,7 +7511,7 @@ class EnergyBalanceApp:
         
         # 参数输入区域
         params_frame = ttk.LabelFrame(main_frame, text="煤耗曲线参数", padding=10)
-        params_frame.pack(fill=tk.X, pady=(0, 10))
+        params_frame.pack(fill=tk.X, pady=(0, 5))  # 减小底部间距
         
         ttk.Label(params_frame, text="二次项系数:").grid(row=0, column=0, sticky=tk.W, pady=5, padx=5)
         v2_quadratic_var = tk.DoubleVar(value=0.0)
@@ -7523,6 +7525,15 @@ class EnergyBalanceApp:
         v2_constant_var = tk.DoubleVar(value=1.4)
         ttk.Entry(params_frame, textvariable=v2_constant_var, width=15).grid(row=2, column=1, pady=5, padx=5)
         
+        # 如果已有保存的曲线参数，则加载到弹窗中
+        if hasattr(self.data_model, 'cost_v2_params') and self.data_model.cost_v2_params:
+            if 'thermal_coal_quadratic' in self.data_model.cost_v2_params:
+                v2_quadratic_var.set(self.data_model.cost_v2_params['thermal_coal_quadratic'])
+            if 'thermal_coal_linear' in self.data_model.cost_v2_params:
+                v2_linear_var.set(self.data_model.cost_v2_params['thermal_coal_linear'])
+            if 'thermal_coal_constant' in self.data_model.cost_v2_params:
+                v2_constant_var.set(self.data_model.cost_v2_params['thermal_coal_constant'])
+        
         # 保存变量到实例（以便后续使用）
         self.v2_thermal_curve_quadratic = v2_quadratic_var
         self.v2_thermal_curve_linear = v2_linear_var
@@ -7530,7 +7541,7 @@ class EnergyBalanceApp:
         
         # 曲线图表区域
         curve_frame = ttk.Frame(main_frame)
-        curve_frame.pack(fill=tk.BOTH, expand=True)
+        curve_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 5))  # 减小底部间距
         
         from matplotlib.figure import Figure
         from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
@@ -7561,16 +7572,89 @@ class EnergyBalanceApp:
         curve_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
         curve_canvas.draw()
         
-        # 按钮区域
+        # 按钮区域 - 使用 pack 确保可见性
         btn_frame = ttk.Frame(main_frame)
-        btn_frame.pack(pady=(10, 0))
+        btn_frame.pack(pady=(5, 10), fill=tk.X)  # 增加上下间距
+        
+        # 居中显示按钮
+        btn_inner_frame = ttk.Frame(btn_frame)
+        btn_inner_frame.pack()
+        
+        def update_curve_plot():
+            """更新曲线图表"""
+            try:
+                # 获取新参数
+                quadratic = v2_quadratic_var.get()
+                linear = v2_linear_var.get()
+                constant = v2_constant_var.get()
+                
+                # 重新计算曲线
+                new_relative_coal_consumption = (
+                    quadratic * relative_output**2 +
+                    linear * relative_output +
+                    constant
+                )
+                
+                # 清除旧曲线
+                curve_ax.clear()
+                
+                # 绘制新曲线
+                curve_ax.plot(relative_output, new_relative_coal_consumption, 'r-', linewidth=2)
+                curve_ax.set_xlabel('相对出力')
+                curve_ax.set_ylabel('相对煤耗')
+                curve_ax.set_title('火电煤耗变化曲线')
+                curve_ax.grid(True, alpha=0.3)
+                curve_ax.set_xlim(0, 1)
+                curve_figure.tight_layout()
+                
+                # 刷新画布
+                curve_canvas.draw()
+                
+            except Exception as e:
+                messagebox.showerror("错误", f"更新曲线失败：{str(e)}")
         
         def on_save():
-            # TODO: 保存曲线参数
-            dialog.destroy()
+            """保存煤耗曲线参数并关闭对话框"""
+            try:
+                # 验证输入
+                quadratic = v2_quadratic_var.get()
+                linear = v2_linear_var.get()
+                constant = v2_constant_var.get()
+                
+                # 保存到实例变量（以便后续使用）
+                self.v2_thermal_curve_quadratic = v2_quadratic_var
+                self.v2_thermal_curve_linear = v2_linear_var
+                self.v2_thermal_curve_constant = v2_constant_var
+                        
+                # 立即更新主界面的保存状态（不等待关闭对话框）
+                if hasattr(self.data_model, 'cost_v2_params'):
+                    self.data_model.cost_v2_params['thermal_coal_quadratic'] = quadratic
+                    self.data_model.cost_v2_params['thermal_coal_linear'] = linear
+                    self.data_model.cost_v2_params['thermal_coal_constant'] = constant
+                
+                # 如果已初始化 cost_v2_params，则立即保存
+                if hasattr(self.data_model, 'cost_v2_params'):
+                    self.data_model.cost_v2_params['thermal_coal_quadratic'] = quadratic
+                    self.data_model.cost_v2_params['thermal_coal_linear'] = linear
+                    self.data_model.cost_v2_params['thermal_coal_constant'] = constant
+                    
+                    # 保存项目数据
+                    self.save_current_project()
+                
+                # 更新图表显示
+                update_curve_plot()
+                
+                # 提示用户
+                messagebox.showinfo("成功", "煤耗曲线参数已保存！")
+                
+                # 关闭对话框
+                dialog.destroy()
+                
+            except Exception as e:
+                messagebox.showerror("错误", f"保存煤耗曲线参数失败：{str(e)}")
         
-        ttk.Button(btn_frame, text="保存", command=on_save).pack(side=tk.LEFT, padx=5)
-        ttk.Button(btn_frame, text="取消", command=dialog.destroy).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_inner_frame, text="💾 保存", command=on_save).pack(side=tk.LEFT, padx=10)
+        ttk.Button(btn_inner_frame, text="取消", command=dialog.destroy).pack(side=tk.LEFT, padx=10)
     
     def init_v2_cost_summary(self):
         """
@@ -7766,7 +7850,7 @@ class EnergyBalanceApp:
             if 'thermal_other_variable' in params:
                 self.v2_thermal_other_variable_var.set(params['thermal_other_variable'])
             
-            # 煤耗曲线参数
+            # 煤耗曲线参数 - 如果有保存的实例变量，则直接设置
             if 'thermal_coal_quadratic' in params and hasattr(self, 'v2_thermal_curve_quadratic'):
                 self.v2_thermal_curve_quadratic.set(params['thermal_coal_quadratic'])
             if 'thermal_coal_linear' in params and hasattr(self, 'v2_thermal_curve_linear'):
