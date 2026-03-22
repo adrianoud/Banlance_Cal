@@ -7663,7 +7663,8 @@ class EnergyBalanceApp:
             self.data_model.cost_v2_params['pv_government_fund'] = self.v2_pv_government_fund_var.get()
             self.data_model.cost_v2_params['pv_policy_subsidy'] = self.v2_pv_policy_subsidy_var.get()
             self.data_model.cost_v2_params['pv_sale_price'] = self.v2_pv_sale_price_var.get()
-            self.data_model.cost_v2_params['pv_green_cert'] = self.v2_pv_green_cert_var.get()
+            # 绿证单价现在是共享参数，存储到 grid 部分
+            self.data_model.cost_v2_params['green_cert_price'] = self.v2_green_cert_price_var.get()
             self.data_model.cost_v2_params['pv_other_fixed'] = self.v2_pv_other_fixed_var.get()
             self.data_model.cost_v2_params['pv_other_variable'] = self.v2_pv_other_variable_var.get()
             
@@ -7688,6 +7689,8 @@ class EnergyBalanceApp:
             self.data_model.cost_v2_params['grid_line_loss'] = self.v2_grid_line_loss_var.get()
             self.data_model.cost_v2_params['grid_operation'] = self.v2_grid_operation_var.get()
             self.data_model.cost_v2_params['grid_government_fund'] = self.v2_grid_government_fund_var.get()
+            # 绿证单价（共享参数）
+            self.data_model.cost_v2_params['green_cert_price'] = self.v2_green_cert_price_var.get()
             
             # 保存项目数据
             self.save_current_project()
@@ -7794,8 +7797,9 @@ class EnergyBalanceApp:
                 self.v2_pv_policy_subsidy_var.set(params['pv_policy_subsidy'])
             if 'pv_sale_price' in params:
                 self.v2_pv_sale_price_var.set(params['pv_sale_price'])
-            if 'pv_green_cert' in params:
-                self.v2_pv_green_cert_var.set(params['pv_green_cert'])
+            # 绿证单价现在是共享参数，从 grid 部分加载
+            if 'green_cert_price' in params:
+                self.v2_green_cert_price_var.set(params['green_cert_price'])
             if 'pv_other_fixed' in params:
                 self.v2_pv_other_fixed_var.set(params['pv_other_fixed'])
             if 'pv_other_variable' in params:
@@ -7840,6 +7844,9 @@ class EnergyBalanceApp:
                 self.v2_grid_operation_var.set(params['grid_operation'])
             if 'grid_government_fund' in params:
                 self.v2_grid_government_fund_var.set(params['grid_government_fund'])
+            # 绿证单价（共享参数）
+            if 'green_cert_price' in params:
+                self.v2_green_cert_price_var.set(params['green_cert_price'])
             
         except Exception as e:
             print(f"加载成本分析 2.0 参数失败：{str(e)}")
@@ -8045,7 +8052,7 @@ class EnergyBalanceApp:
         pv_row = 0
         
         # 光伏 - 直接材料
-        pv_material_frame = ttk.LabelFrame(pv_col, text="直接材料", padding=5)
+        pv_material_frame = ttk.LabelFrame(pv_col, text="直接材料 (光伏)", padding=5)
         pv_material_frame.grid(row=pv_row, column=0, sticky=(tk.W, tk.E), pady=3)
         pv_row += 1
         
@@ -8104,18 +8111,14 @@ class EnergyBalanceApp:
         self.v2_pv_policy_subsidy_var = tk.DoubleVar(value=0.0129)
         ttk.Entry(pv_reserve_frame, textvariable=self.v2_pv_policy_subsidy_var, width=12).grid(row=2, column=1, pady=2, padx=3)
         
-        # 光伏 - 销售电价和绿证
-        pv_price_frame = ttk.LabelFrame(pv_col, text="电价与绿证", padding=5)
+        # 光伏 - 销售电价（删除绿证单价，移到下网成本）
+        pv_price_frame = ttk.LabelFrame(pv_col, text="销售电价", padding=5)
         pv_price_frame.grid(row=pv_row, column=0, sticky=(tk.W, tk.E), pady=3)
         pv_row += 1
         
         ttk.Label(pv_price_frame, text="销售电价 (元/kWh):").grid(row=0, column=0, sticky=tk.W, pady=2, padx=3)
         self.v2_pv_sale_price_var = tk.DoubleVar(value=0.3)
         ttk.Entry(pv_price_frame, textvariable=self.v2_pv_sale_price_var, width=12).grid(row=0, column=1, pady=2, padx=3)
-        
-        ttk.Label(pv_price_frame, text="绿证单价 (元/kWh):").grid(row=1, column=0, sticky=tk.W, pady=2, padx=3)
-        self.v2_pv_green_cert_var = tk.DoubleVar(value=0.008)
-        ttk.Entry(pv_price_frame, textvariable=self.v2_pv_green_cert_var, width=12).grid(row=1, column=1, pady=2, padx=3)
         
         # 光伏 - 其他成本
         pv_other_frame = ttk.LabelFrame(pv_col, text="其他成本", padding=5)
@@ -8134,7 +8137,7 @@ class EnergyBalanceApp:
         wind_row = 0
         
         # 风电 - 直接材料
-        wind_material_frame = ttk.LabelFrame(wind_col, text="直接材料", padding=5)
+        wind_material_frame = ttk.LabelFrame(wind_col, text="直接材料 (风电)", padding=5)
         wind_material_frame.grid(row=wind_row, column=0, sticky=(tk.W, tk.E), pady=3)
         wind_row += 1
         
@@ -8221,8 +8224,8 @@ class EnergyBalanceApp:
         pv_col.columnconfigure(0, weight=1)
         wind_col.columnconfigure(0, weight=1)
         
-        # 第 3 列：下网成本
-        grid_frame = ttk.LabelFrame(top_input_frame, text="3. 下网成本", padding=5)
+        # 第 3 列：下网成本（包含共享的绿证单价参数）
+        grid_frame = ttk.LabelFrame(top_input_frame, text="3. 下网成本及绿证", padding=5)
         grid_frame.grid(row=0, column=2, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(5, 0))
         
         # 复用原有的下网成本参数（使用相同的变量）
@@ -8251,23 +8254,33 @@ class EnergyBalanceApp:
         ttk.Label(grid_frame, text="政府性基金 (元/kWh):").grid(row=grid_row, column=0, sticky=tk.W, pady=3, padx=5)
         self.v2_grid_government_fund_var = tk.DoubleVar(value=0.0041)
         ttk.Entry(grid_frame, textvariable=self.v2_grid_government_fund_var, width=15).grid(row=grid_row, column=1, pady=3, padx=5)
+        grid_row += 1
         
-        # 配置权重
-        top_input_frame.columnconfigure(0, weight=2)
-        top_input_frame.columnconfigure(1, weight=2)
-        top_input_frame.columnconfigure(2, weight=1)
+        # 绿证单价（光伏和风电共享参数）
+        green_cert_frame = ttk.LabelFrame(grid_frame, text="新能源绿证", padding=5)
+        green_cert_frame.grid(row=grid_row, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=5)
+        
+        ttk.Label(green_cert_frame, text="绿证单价 (元/kWh):").grid(row=0, column=0, sticky=tk.W, pady=3, padx=5)
+        self.v2_green_cert_price_var = tk.DoubleVar(value=0.008)
+        ttk.Entry(green_cert_frame, textvariable=self.v2_green_cert_price_var, width=15).grid(row=0, column=1, pady=3, padx=5)
+        ttk.Label(green_cert_frame, text="(光伏、风电共用)", foreground="gray").grid(row=1, column=0, columnspan=2, sticky=tk.W, padx=5)
+        
+        # 配置权重 - 调整列宽比例，使三列占满屏幕
+        top_input_frame.columnconfigure(0, weight=3)  # 火电成本（更宽）
+        top_input_frame.columnconfigure(1, weight=3)  # 新能源成本（更宽）
+        top_input_frame.columnconfigure(2, weight=2)  # 下网成本（稍窄）
         top_input_frame.rowconfigure(0, weight=1)
         
-        # ===== 下方结果展示区域 =====
+        # ===== 下方结果展示区域（增加高度以保证显示完整） =====
         bottom_result_frame = ttk.Frame(tab)
-        bottom_result_frame.grid(row=2, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(0, 10))
+        bottom_result_frame.grid(row=3, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(5, 0))
         
-        # 左侧：8760 小时趋势图
+        # 左侧：8760 小时趋势图（增加默认高度）
         left_plot_frame = ttk.LabelFrame(bottom_result_frame, text="8760 小时发电出力及下网负荷趋势", padding=5)
         left_plot_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(0, 5))
         
-        # 创建 matplotlib 图形（暂时复用现有的）
-        self.v2_cost_figure = Figure(figsize=(8, 6), dpi=100)
+        # 创建 matplotlib 图形（调整尺寸以适应更大空间）
+        self.v2_cost_figure = Figure(figsize=(10, 7), dpi=100)
         self.v2_cost_ax = self.v2_cost_figure.add_subplot(111)
         self.v2_cost_canvas = FigureCanvasTkAgg(self.v2_cost_figure, left_plot_frame)
         self.v2_cost_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True, pady=5)
@@ -8279,17 +8292,17 @@ class EnergyBalanceApp:
         self.v2_cost_ax.set_title('8760 小时发电出力及下网负荷趋势')
         self.v2_cost_canvas.draw()
         
-        # 右侧：年度汇总值
+        # 右侧：年度汇总值（增加行高以显示更多条目）
         right_summary_frame = ttk.LabelFrame(bottom_result_frame, text="年度汇总", padding=5)
         right_summary_frame.grid(row=0, column=1, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(5, 0))
         
         # 年度汇总表格 - 两列：项目、数值
         columns = ('项目', '数值')
-        self.v2_summary_tree = ttk.Treeview(right_summary_frame, columns=columns, show='headings', height=15)
+        self.v2_summary_tree = ttk.Treeview(right_summary_frame, columns=columns, show='headings', height=20)
         self.v2_summary_tree.heading('项目', text='项目')
         self.v2_summary_tree.heading('数值', text='数值')
-        self.v2_summary_tree.column('项目', width=150)
-        self.v2_summary_tree.column('数值', width=120)
+        self.v2_summary_tree.column('项目', width=180)
+        self.v2_summary_tree.column('数值', width=140)
         
         # 添加滚动条
         summary_scrollbar = ttk.Scrollbar(right_summary_frame, orient=tk.VERTICAL, command=self.v2_summary_tree.yview)
