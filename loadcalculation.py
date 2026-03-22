@@ -7827,13 +7827,30 @@ class EnergyBalanceApp:
             renewable_electricity_cost_yuan = pv_consumption * pv_sale_price + wind_consumption * wind_sale_price
             renewable_electricity_cost_wan = renewable_electricity_cost_yuan / 10000.0
             
-            park_total_cost = thermal_cost + grid_cost + renewable_electricity_cost_wan
+            # 购买绿证费用（根据 biz_req.md L480-482）
+            # 购买绿证费用 = 潜在购买绿证费用 - 新能源抵扣绿证费用
+            # 潜在购买绿证费用 = 负荷用电量（kWh）× 可再生能源占比要求 × 绿证单价 / 10000
+            # 新能源抵扣绿证费用 = (光伏发电量 + 风电发电量) × 绿证单价 / 10000
+            green_cert_price = params.get('green_cert_price', 0.008)  # 元/kWh
+            green_ratio = params.get('thermal_green_ratio', 0.3)  # 可再生能源占比要求
+            
+            # 潜在购买绿证费用（万元）
+            potential_green_cert_cost = park_energy_consumption * 10000 * green_ratio * green_cert_price / 10000.0
+            
+            # 新能源抵扣绿证费用（万元）= 实际消纳电量 × 绿证单价 / 10000
+            renewable_green_cert_offset = total_renewable_actual * green_cert_price / 10000.0
+            
+            # 净购买绿证费用（万元）
+            net_green_cert_cost = potential_green_cert_cost - renewable_green_cert_offset
+            
+            # 园区总用电成本 = 火电成本 + 下网成本 + 新能源用电成本 + 购买绿证费用
+            park_total_cost = thermal_cost + grid_cost + renewable_electricity_cost_wan + net_green_cert_cost
             
             # 绿电占比 = (光伏 + 风电实际发电量) / 总用电量 × 100%
             green_power_ratio = (total_pv_generation + total_wind_generation) / total_energy_with_internal * 100 if total_energy_with_internal > 0 else 0.0
             
-            # 绿证购买费用（净费用）- 火电不再购买，只显示新能源抵扣
-            green_cert_cost = calc_results['summary'].get('net_green_cert_cost', 0.0)
+            # 绿证购买费用（根据 biz_req.md L480-482 计算）
+            # 已在上面计算：net_green_cert_cost = potential_green_cert_cost - renewable_green_cert_offset
             
             summary_data.extend([
                 ('', '', ''),
@@ -7843,8 +7860,10 @@ class EnergyBalanceApp:
                 ('  └─ 火电成本', f"{thermal_cost:.2f} 万元", ''),
                 ('  └─ 下网成本', f"{grid_cost:.2f} 万元", ''),
                 ('  └─ 新能源用电成本', f"{renewable_electricity_cost_wan:.2f} 万元", ''),
+                ('  └─ 购买绿证费用', f"{net_green_cert_cost:.2f} 万元", ''),
+                ('      ├─ 潜在购买绿证费用', f"{potential_green_cert_cost:.2f} 万元", ''),
+                ('      └─ 新能源抵扣绿证费用', f"{renewable_green_cert_offset:.2f} 万元", ''),
                 ('绿电占比', f"{green_power_ratio:.2f}%", ''),
-                ('绿证购买费用', f"{green_cert_cost:.2f} 万元", ''),
             ])
             
             # ========== 三、火电部分 ==========
