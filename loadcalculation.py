@@ -7851,13 +7851,14 @@ class EnergyBalanceApp:
             # 从 calc_results 中提取详细成本分项
             thermal = calc_results['thermal']
             
-            # 计算直接材料、直接人工、制造费用
+            # 计算直接材料、直接人工、制造费用、备容与政府基金
             params = self.data_model.cost_v2_params if hasattr(self.data_model, 'cost_v2_params') else {}
             
             # 直接材料 = 燃料成本 + 纯水及其他（固定 + 可变）
             # 注意：thermal['variable_cost'] 包含燃料、纯水可变、政府基金、政策补贴、容量费等
-            # 这里简化处理：将可变成本视为直接材料（实际上包含了多项内容）
-            direct_material_cost = thermal['variable_cost']  # 万元（包含燃料及所有可变成本）
+            # 需要从 variable_cost 中扣除备容与政府基金
+            reserve_and_government_fund = thermal.get('reserve_and_government_fund', 0.0)  # 万元
+            direct_material_cost = thermal['variable_cost'] - reserve_and_government_fund  # 扣除后的可变成本（燃料 + 纯水可变 + 其他可变）
             pure_water_fixed = params.get('thermal_pure_water_cost', 100.0)  # 万元（固定部分）
             direct_material_total = direct_material_cost + pure_water_fixed
             
@@ -7902,6 +7903,7 @@ class EnergyBalanceApp:
                 ('直接材料总成本', f"{direct_material_total:.2f} 万元", '(固定 + 可变)'),
                 ('直接人工总成本', f"{direct_labor_cost:.2f} 万元", '(固定)'),
                 ('制造费用总成本', f"{manufacturing_total:.2f} 万元", '(固定)'),
+                ('备容与政府基金', f"{reserve_and_government_fund:.2f} 万元", '(从直接材料分离)'),
                 ('火电到户电价', f"{thermal_unit_price:.4f} 元/kWh", ''),
                 ('碳排放盈亏量', f"{carbon_balance_ton:.1f} 吨", '正为盈，负为亏'),
                 ('碳排放成本', f"{carbon_cost:.2f} 万元", ''),
