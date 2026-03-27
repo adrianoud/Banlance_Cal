@@ -43922,6 +43922,7 @@
     "thermal_coal_linear": -0.4,
     "thermal_coal_constant": 1.4
   },
+  "cost_v2_params": {},
   "optimized_results": {
     "hourly_thermal_output": [
       230000.0,

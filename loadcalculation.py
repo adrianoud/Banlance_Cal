@@ -1482,6 +1482,10 @@ class EnergyBalanceApp:
         self.create_project_management_ui()
                 
     def create_widgets(self):
+        # 初始化 UI 管理器
+        from ui_components import UIManager
+        self.ui_manager = UIManager(self)
+        
         # 主框架
         main_frame = ttk.Frame(self.root, padding="10")
         main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
@@ -1490,23 +1494,8 @@ class EnergyBalanceApp:
         notebook = ttk.Notebook(main_frame)
         notebook.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         
-        # 数据导入标签页
-        self.create_data_import_tab(notebook)
-        
-        # 函数设置标签页
-        self.create_function_settings_tab(notebook)
-        
-        # 检修和投产计划标签页
-        self.create_maintenance_schedule_tab(notebook)
-        
-        # 计算与结果标签页
-        self.create_calculation_tab(notebook)
-        
-        # 成本详细分析标签页
-        self.create_detailed_cost_analysis_tab(notebook)
-        
-        # 成本分析 2.0 标签页
-        self.create_cost_analysis_v2_tab(notebook)
+        # 使用 UI 管理器创建所有标签页
+        self.ui_manager.create_all_tabs(notebook)
         
         # 配置网格权重
         self.root.columnconfigure(0, weight=1)
@@ -7961,6 +7950,85 @@ class EnergyBalanceApp:
             
         except Exception as e:
             messagebox.showerror("错误", f"保存成本分析 2.0 参数失败：{str(e)}")
+    
+    def export_v2_cost_summary(self):
+        """
+        导出成本分析 2.0 的年度汇总数据为 Excel 文件
+        文件名格式：{项目名称}_成本汇总结果.xlsx
+        """
+        try:
+            # 检查 openpyxl 是否可用
+            if openpyxl is None:
+                messagebox.showerror("错误", "未安装 openpyxl 库，无法导出 Excel 文件。\n请运行：pip install openpyxl")
+                return
+            
+            # 获取当前项目信息
+            if not self.current_project:
+                messagebox.showwarning("警告", "当前没有打开的项目，请先创建或打开一个项目。")
+                return
+            
+            # 获取项目名称
+            project_name = self.current_project.get('name', '未命名项目')
+            
+            # 构建文件名
+            file_name = f"{project_name}_成本汇总结果.xlsx"
+            
+            # 获取项目目录
+            project_dir = self.current_project.get('path', self.project_manager.projects_dir)
+            file_path = os.path.join(project_dir, file_name)
+            
+            # 从 Treeview 中读取数据
+            summary_data = []
+            if hasattr(self, 'v2_summary_tree'):
+                for item in self.v2_summary_tree.get_children():
+                    values = self.v2_summary_tree.item(item)['values']
+                    if len(values) >= 3:
+                        summary_data.append(values)
+            
+            if not summary_data:
+                messagebox.showwarning("警告", "当前没有可导出的汇总数据，请先刷新成本数据。")
+                return
+            
+            # 创建 Excel 工作簿
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = "成本汇总结果"
+            
+            # 写入表头信息
+            ws['A1'] = "成本分析 2.0 - 年度汇总结果"
+            ws['A2'] = f"项目名称：{project_name}"
+            ws['A3'] = f"导出时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+            
+            # 合并单元格用于标题
+            ws.merge_cells('A1:C1')
+            ws.merge_cells('A2:C2')
+            ws.merge_cells('A3:C3')
+            
+            # 设置列宽和行高
+            ws.column_dimensions['A'].width = 40
+            ws.column_dimensions['B'].width = 20
+            ws.column_dimensions['C'].width = 20
+            
+            # 写入列标题
+            headers = ['项目', '数值', '备注']
+            for col_num, header in enumerate(headers, 1):
+                cell = ws.cell(row=5, column=col_num, value=header)
+                cell.font = openpyxl.styles.Font(bold=True)
+                cell.alignment = openpyxl.styles.Alignment(horizontal='center', vertical='center')
+            
+            # 写入数据
+            for row_num, row_data in enumerate(summary_data, 6):
+                for col_num, value in enumerate(row_data, 1):
+                    ws.cell(row=row_num, column=col_num, value=value)
+            
+            # 保存文件
+            wb.save(file_path)
+            
+            # 显示成功消息
+            messagebox.showinfo("成功", f"成本汇总结果已导出到：\n{file_path}")
+            
+        except Exception as e:
+            messagebox.showerror("错误", f"导出 Excel 文件失败：{str(e)}")
     
     def load_v2_cost_parameters(self):
         """
