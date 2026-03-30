@@ -7585,6 +7585,14 @@ class EnergyBalanceApp:
             park_energy_consumption = total_energy_with_internal - total_internal_energy
             park_energy_consumption_wan = park_energy_consumption / 10000.0  # 万度
             
+            # 4. 灵活负荷消纳电量
+            total_flexible_load = np.sum(balance_results['hourly_flexible_load_consumption']) if 'hourly_flexible_load_consumption' in balance_results else 0.0
+            total_flexible_load_wan = total_flexible_load / 10000.0  # 万度
+            
+            # 5. 园区总负荷用电量 = 园区负荷 + 灵活负荷
+            total_park_load = park_energy_consumption + total_flexible_load
+            total_park_load_wan = total_park_load / 10000.0  # 万度
+            
             # 4. 光伏发电量
             total_pv_generation = np.sum(balance_results['hourly_pv_output']) if 'hourly_pv_output' in balance_results else 0.0
             total_pv_generation_wan = total_pv_generation / 10000.0  # 万度
@@ -7613,11 +7621,18 @@ class EnergyBalanceApp:
             summary_data = []
             
             # ========== 一、整体情况 ==========
+            # 总用电量 = 原总电量（含厂用电） + 灵活负荷消纳电量
+            total_energy_with_flexible = total_energy_with_internal + total_flexible_load
+            total_energy_with_flexible_wan = total_energy_with_flexible / 10000.0  # 万度
+            
+            # 综合单位成本 = 总生产成本 / 总用电量（含灵活负荷）
+            unit_cost_with_flexible = (calc_results['summary']['total_cost']*10000)/total_energy_with_flexible if total_energy_with_flexible > 0 else 0.0
+            
             summary_data.extend([
                 ('═══ 一、整体情况 ═══', '', ''),
-                ('总电量（含厂用电）', f"{total_energy_with_internal_wan:.1f} 万度", ''),
+                ('总用电量（含灵活负荷）', f"{total_energy_with_flexible_wan:.1f} 万度", ''),
                 ('总生产成本', f"{calc_results['summary']['total_cost']:.2f} 万元", ''),
-                ('综合单位成本', f"{(calc_results['summary']['total_cost']*10000)/total_energy_with_internal:.4f} 元/kWh" if total_energy_with_internal > 0 else 'N/A', ''),
+                ('综合单位成本', f"{unit_cost_with_flexible:.4f} 元/kWh", ''),
             ])
             
             # ========== 二、园区部分 ==========
@@ -7663,8 +7678,9 @@ class EnergyBalanceApp:
             # 园区总用电成本 = 火电成本 + 下网成本 + 新能源用电成本 + 购买绿证费用
             park_total_cost = thermal_cost + grid_cost + renewable_electricity_cost_wan + net_green_cert_cost
             
-            # 绿电占比 = (光伏 + 风电实际消纳电量) / 园区负荷用电量 × 100%
-            green_power_ratio = total_renewable_actual / park_energy_consumption * 100 if park_energy_consumption > 0 else 0.0
+            # 绿电占比 = (光伏 + 风电实际消纳电量) / 园区总负荷用电量 × 100%
+            # 园区总负荷用电量 = 园区负荷 + 灵活负荷
+            green_power_ratio = total_renewable_actual / total_park_load * 100 if total_park_load > 0 else 0.0
             
             # 绿证购买费用（根据 biz_req.md L480-482 计算）
             # 已在上面计算：net_green_cert_cost = potential_green_cert_cost - renewable_green_cert_offset
@@ -7672,7 +7688,9 @@ class EnergyBalanceApp:
             summary_data.extend([
                 ('', '', ''),
                 ('═══ 二、园区部分 ═══', '', ''),
-                ('园区负荷用电量', f"{park_energy_consumption_wan:.1f} 万度", ''),
+                ('园区总负荷用电量', f"{total_park_load_wan:.1f} 万度", ''),
+                ('  ├─ 园区负荷', f"{park_energy_consumption_wan:.1f} 万度", ''),
+                ('  └─ 灵活负荷', f"{total_flexible_load_wan:.1f} 万度", ''),
                 ('总用电成本', f"{park_total_cost:.2f} 万元", ''),
                 ('  └─ 火电成本', f"{thermal_cost:.2f} 万元", ''),
                 ('  └─ 下网成本', f"{grid_cost:.2f} 万元", ''),

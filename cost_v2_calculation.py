@@ -321,10 +321,22 @@ class CostV2Calculator:
             }
         
         pv_output_hourly = self.results['hourly_pv_output']
+        wind_pv_actual_hourly = self.results.get('hourly_wind_pv_actual', pv_output_hourly)  # 风光实际出力总和
         
         # ===== 3. 基础计算 =====
         # 总发电量 (kWh)
         total_pv_energy_kwh = np.sum(pv_output_hourly)
+        
+        # 光伏实际消纳电量计算（考虑灵活负荷影响）
+        # 假设光伏和风电按发电量比例分配实际消纳电量
+        total_wind_energy_kwh_for_ratio = np.sum(self.results['hourly_wind_output']) if 'hourly_wind_output' in self.results else 0.0
+        total_renewable_generation = total_pv_energy_kwh + total_wind_energy_kwh_for_ratio
+        
+        if total_renewable_generation > 0:
+            pv_actual_ratio = total_pv_energy_kwh / total_renewable_generation  # 光伏占比
+            total_pv_actual_kwh = np.sum(wind_pv_actual_hourly) * pv_actual_ratio  # 光伏实际消纳电量
+        else:
+            total_pv_actual_kwh = total_pv_energy_kwh
         
         # ===== 4. 可变成本计算 =====
         # 可变成本单价 (元/kWh)
@@ -336,8 +348,8 @@ class CostV2Calculator:
             other_variable  # 其他可变成本
         )
         
-        # 可变成本总和 (万元)
-        total_variable_cost_wan = total_pv_energy_kwh * variable_unit_cost / 10000.0
+        # 可变成本总和 (万元) - 基于实际消纳电量
+        total_variable_cost_wan = total_pv_actual_kwh * variable_unit_cost / 10000.0
         
         # ===== 5. 固定成本计算 =====
         # 固定成本 (万元)
@@ -352,8 +364,8 @@ class CostV2Calculator:
         )
         
         # ===== 6. 抵扣绿证费用计算 =====
-        # 抵扣绿证费用 = 实际发电量 × 绿证单价
-        green_cert_income_yuan = total_pv_energy_kwh * green_cert_price
+        # 抵扣绿证费用 = 实际消纳电量 × 绿证单价
+        green_cert_income_yuan = total_pv_actual_kwh * green_cert_price
         green_cert_income_wan = green_cert_income_yuan / 10000.0
         
         # ===== 7. 汇总 =====
@@ -375,9 +387,9 @@ class CostV2Calculator:
             'variable_cost': total_variable_cost_wan,  # 万元
             'fixed_cost': total_fixed_cost_wan,  # 万元
             'green_cert_income': green_cert_income_wan,  # 万元（抵扣项）
-            'total_energy': total_pv_energy_kwh,  # kWh
+            'total_energy': total_pv_actual_kwh,  # kWh - 使用实际消纳电量
             'unit_cost': unit_cost_yuan_kwh,  # 元/kWh
-            'hourly_variable_cost': [output * variable_unit_cost for output in pv_output_hourly]  # 每小时可变成本 (元)
+            'hourly_variable_cost': [actual * variable_unit_cost for actual in wind_pv_actual_hourly]  # 每小时可变成本 (元)，基于实际出力
         }
     
     def calculate_wind_cost(self):
