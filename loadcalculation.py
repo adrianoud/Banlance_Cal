@@ -7663,8 +7663,8 @@ class EnergyBalanceApp:
             # 园区总用电成本 = 火电成本 + 下网成本 + 新能源用电成本 + 购买绿证费用
             park_total_cost = thermal_cost + grid_cost + renewable_electricity_cost_wan + net_green_cert_cost
             
-            # 绿电占比 = (光伏 + 风电实际发电量) / 总用电量 × 100%
-            green_power_ratio = (total_pv_generation + total_wind_generation) / total_energy_with_internal * 100 if total_energy_with_internal > 0 else 0.0
+            # 绿电占比 = (光伏 + 风电实际消纳电量) / 园区负荷用电量 × 100%
+            green_power_ratio = total_renewable_actual / park_energy_consumption * 100 if park_energy_consumption > 0 else 0.0
             
             # 绿证购买费用（根据 biz_req.md L480-482 计算）
             # 已在上面计算：net_green_cert_cost = potential_green_cert_cost - renewable_green_cert_offset
