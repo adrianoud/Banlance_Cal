@@ -8039,23 +8039,23 @@ class EnergyBalanceApp:
         
         # 顶部按钮区域
         top_button_frame = ttk.Frame(tab)
-        top_button_frame.grid(row=0, column=0, sticky=tk.E, padx=5, pady=5)
+        top_button_frame.grid(row=0, column=0, sticky=(tk.W, tk.E), padx=5, pady=5)
         
-        # 添加平衡点电价分析表按钮
-        break_even_btn = ttk.Button(top_button_frame, text="📊 平衡点电价分析表", command=self.show_break_even_price_analysis)
-        break_even_btn.pack(side=tk.RIGHT, padx=5)
-        
-        # 添加刷新数据按钮
-        refresh_btn = ttk.Button(top_button_frame, text="🔄 刷新成本数据", command=self.update_v2_cost_analysis)
-        refresh_btn.pack(side=tk.RIGHT, padx=5)
+        # 添加返回项目列表按钮（最左边）
+        back_btn = ttk.Button(top_button_frame, text="保存并返回项目列表", command=self.save_and_return_to_project_list)
+        back_btn.pack(side=tk.LEFT, padx=5)
         
         # 添加保存按钮
         save_btn = ttk.Button(top_button_frame, text="💾 保存成本参数", command=self.save_v2_cost_parameters)
-        save_btn.pack(side=tk.RIGHT, padx=5)
+        save_btn.pack(side=tk.LEFT, padx=5)
         
-        # 添加返回项目列表按钮
-        back_btn = ttk.Button(top_button_frame, text="保存并返回项目列表", command=self.save_and_return_to_project_list)
-        back_btn.pack(side=tk.RIGHT, padx=5)
+        # 添加平衡点电价分析表按钮
+        break_even_btn = ttk.Button(top_button_frame, text="📊 平衡点电价分析表", command=self.show_break_even_price_analysis)
+        break_even_btn.pack(side=tk.LEFT, padx=5)
+        
+        # 添加刷新数据按钮
+        refresh_btn = ttk.Button(top_button_frame, text="🔄 刷新成本数据", command=self.update_v2_cost_analysis)
+        refresh_btn.pack(side=tk.LEFT, padx=5)
         
         # ===== 上方输入区域 =====
         top_input_frame = ttk.Frame(tab)
