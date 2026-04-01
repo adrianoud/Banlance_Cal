@@ -7330,6 +7330,9 @@ class EnergyBalanceApp:
         """
         导出成本分析 2.0 的年度汇总数据为 Excel 文件
         文件名格式：{项目名称}_成本汇总结果.xlsx
+        支持选择保存位置，包含 2 个 sheet：
+        - Sheet 1: 项目信息、调峰机组参数、检修计划、月度年度汇总表
+        - Sheet 2: 成本计算 2.0 输入项和年度汇总结果
         """
         try:
             # 检查 openpyxl 是否可用
@@ -7345,56 +7348,278 @@ class EnergyBalanceApp:
             # 获取项目名称
             project_name = self.current_project.get('name', '未命名项目')
             
-            # 构建文件名
-            file_name = f"{project_name}_成本汇总结果.xlsx"
+            # 构建默认文件名
+            default_file_name = f"{project_name}_成本汇总结果.xlsx"
             
-            # 获取项目目录
+            # 获取默认保存目录（项目目录）
             project_dir = self.current_project.get('path', self.project_manager.projects_dir)
-            file_path = os.path.join(project_dir, file_name)
+            default_file_path = os.path.join(project_dir, default_file_name)
             
-            # 从 Treeview 中读取数据
-            summary_data = []
+            # 弹出文件保存对话框，让用户选择保存位置
+            file_path = filedialog.asksaveasfilename(
+                title="保存成本汇总结果",
+                defaultextension=".xlsx",
+                initialfile=default_file_name,
+                initialdir=project_dir,
+                filetypes=[("Excel 文件", "*.xlsx")]
+            )
+            
+            # 如果用户取消保存，则直接返回
+            if not file_path:
+                return
+            
+            # 从 Treeview 中读取成本汇总数据
+            cost_summary_data = []
             if hasattr(self, 'v2_summary_tree'):
                 for item in self.v2_summary_tree.get_children():
                     values = self.v2_summary_tree.item(item)['values']
                     if len(values) >= 3:
-                        summary_data.append(values)
+                        cost_summary_data.append(values)
             
-            if not summary_data:
+            if not cost_summary_data:
                 messagebox.showwarning("警告", "当前没有可导出的汇总数据，请先刷新成本数据。")
                 return
             
             # 创建 Excel 工作簿
             wb = openpyxl.Workbook()
-            ws = wb.active
-            ws.title = "成本汇总结果"
             
-            # 写入表头信息
-            ws['A1'] = "成本分析 2.0 - 年度汇总结果"
-            ws['A2'] = f"项目名称：{project_name}"
-            ws['A3'] = f"导出时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+            # ========== Sheet 1: 项目信息、调峰机组参数、检修计划、平衡计算结果 ==========
+            ws1 = wb.active
+            ws1.title = "项目信息及平衡计算"
             
-            # 合并单元格用于标题
-            ws.merge_cells('A1:C1')
-            ws.merge_cells('A2:C2')
-            ws.merge_cells('A3:C3')
+            current_row = 1
             
-            # 设置列宽和行高
-            ws.column_dimensions['A'].width = 40
-            ws.column_dimensions['B'].width = 20
-            ws.column_dimensions['C'].width = 20
+            # 1. 项目名字 - 使用与 Sheet2 相同的格式
+            ws1[f'A{current_row}'] = f"项目名称：{project_name}"
+            ws1.merge_cells(f'A{current_row}:C{current_row}')
+            ws1[f'A{current_row}'].font = openpyxl.styles.Font(bold=True, size=12)
+            ws1[f'A{current_row}'].alignment = openpyxl.styles.Alignment(horizontal='left', vertical='center')
+            current_row += 2
             
-            # 写入列标题
-            headers = ['项目', '数值', '备注']
-            for col_num, header in enumerate(headers, 1):
-                cell = ws.cell(row=5, column=col_num, value=header)
-                cell.font = openpyxl.styles.Font(bold=True)
-                cell.alignment = openpyxl.styles.Alignment(horizontal='center', vertical='center')
+            # 2. 调峰机组设置参数
+            ws1[f'A{current_row}'] = "调峰机组参数"
+            ws1[f'B{current_row}'] = "数值"
+            ws1[f'C{current_row}'] = "备注"
+            for cell in ['A', 'B', 'C']:
+                ws1[f'{cell}{current_row}'].font = openpyxl.styles.Font(bold=True)
+                ws1[f'{cell}{current_row}'].alignment = openpyxl.styles.Alignment(horizontal='center', vertical='center')
+            current_row += 1
             
-            # 写入数据
-            for row_num, row_data in enumerate(summary_data, 6):
-                for col_num, value in enumerate(row_data, 1):
-                    ws.cell(row=row_num, column=col_num, value=value)
+            # 最大出力
+            ws1[f'A{current_row}'] = "最大出力 (kW)"
+            ws1[f'B{current_row}'] = self.data_model.peak_power_max
+            current_row += 1
+            
+            # 夏季最小出力
+            ws1[f'A{current_row}'] = "夏季最小出力 (kW)"
+            ws1[f'B{current_row}'] = self.data_model.peak_power_min_summer
+            current_row += 1
+            
+            # 冬季最小出力
+            ws1[f'A{current_row}'] = "冬季最小出力 (kW)"
+            ws1[f'B{current_row}'] = self.data_model.peak_power_min_winter
+            current_row += 2
+            
+            # 3. 检修计划
+            ws1[f'A{current_row}'] = "检修计划"
+            ws1[f'B{current_row}'] = "开始日期"
+            ws1[f'C{current_row}'] = "结束日期"
+            ws1[f'D{current_row}'] = "影响负荷 (kW)"
+            for cell in ['A', 'B', 'C', 'D']:
+                ws1[f'{cell}{current_row}'].font = openpyxl.styles.Font(bold=True)
+                ws1[f'{cell}{current_row}'].alignment = openpyxl.styles.Alignment(horizontal='center', vertical='center')
+            current_row += 1
+            
+            # 写入检修计划数据
+            if hasattr(self.data_model, 'maintenance_schedules') and self.data_model.maintenance_schedules:
+                for schedule in self.data_model.maintenance_schedules:
+                    ws1[f'A{current_row}'] = schedule.get('name', '')
+                    ws1[f'B{current_row}'] = schedule.get('start_date', '')
+                    ws1[f'C{current_row}'] = schedule.get('end_date', '')
+                    # 使用 power_size 字段（影响负荷出力大小）
+                    ws1[f'D{current_row}'] = schedule.get('power_size', 0)
+                    current_row += 1
+            else:
+                ws1[f'A{current_row}'] = "无检修计划"
+                current_row += 1
+            
+            current_row += 1
+            
+            # 4. 平衡计算结果 - 直接从计算结果中获取月度年度汇总数据
+            ws1[f'A{current_row}'] = "月份"
+            ws1[f'B{current_row}'] = "总用电量 (kWh)"
+            ws1[f'C{current_row}'] = "总发电量 (kWh)"
+            ws1[f'D{current_row}'] = "火电发电量 (kWh)"
+            ws1[f'E{current_row}'] = "负荷用电量 (kWh)"
+            ws1[f'F{current_row}'] = "厂用电量 (kWh)"
+            ws1[f'G{current_row}'] = "光伏风电发电量 (kWh)"
+            ws1[f'H{current_row}'] = "光伏风电消纳电量 (kWh)"
+            ws1[f'I{current_row}'] = "弃电量 (kWh)"
+            ws1[f'J{current_row}'] = "下网电量 (kWh)"
+            ws1[f'K{current_row}'] = "弃风光率 (%)"
+            
+            for col in ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K']:
+                ws1[f'{col}{current_row}'].font = openpyxl.styles.Font(bold=True)
+                ws1[f'{col}{current_row}'].alignment = openpyxl.styles.Alignment(horizontal='center', vertical='center')
+            current_row += 1
+            
+            # 如果有计算结果，写入月度数据
+            if hasattr(self, 'results') and self.results and 'hourly_corrected_electric_load' in self.results:
+                from datetime import timedelta
+                base_date = datetime(2026, 1, 1)
+                
+                # 初始化每个月的数据
+                monthly_stats = {}
+                for month in range(1, 13):
+                    monthly_stats[month] = {
+                        'grid_load_sum': 0.0,
+                        'abandon_sum': 0.0,
+                        'max_output_sum': 0.0,
+                        'generation_sum': 0.0,
+                        'total_load_sum': 0.0,
+                        'wind_pv_abandon_sum': 0.0,
+                        'thermal_sum': 0.0,
+                        'internal_electric_sum': 0.0,
+                        'wind_pv_actual_sum': 0.0,
+                        'corrected_electric_sum': 0.0
+                    }
+                
+                # 累计每个月的数据
+                for i in range(8760):
+                    current_time = base_date + timedelta(hours=i)
+                    month = current_time.month
+                    stats = monthly_stats[month]
+                    
+                    # 下网电量
+                    stats['grid_load_sum'] += self.results['hourly_grid_load'][i]
+                    # 光伏风电最大出力
+                    pv_output = self.results['hourly_pv_output'][i]
+                    wind_output = self.results['hourly_wind_output'][i]
+                    stats['max_output_sum'] += (pv_output + wind_output)
+                    # 总发电量
+                    stats['generation_sum'] += self.results['hourly_generation'][i]
+                    # 总用电量
+                    stats['total_load_sum'] += self.results['hourly_total_load'][i]
+                    # 弃电量（修正后）
+                    hourly_original_abandon = max(self.results['hourly_wind_pv_abandon'][i], 0)
+                    hourly_flexible_consumption = self.results['hourly_flexible_load_consumption'][i]
+                    stats['wind_pv_abandon_sum'] += max(hourly_original_abandon - hourly_flexible_consumption, 0)
+                    stats['abandon_sum'] = stats['wind_pv_abandon_sum']
+                    # 火电发电量
+                    stats['thermal_sum'] += self.results['hourly_thermal_output'][i]
+                    # 厂用电量
+                    stats['internal_electric_sum'] += self.results['hourly_internal_electric_load'][i]
+                    # 光伏风电消纳电量
+                    hourly_original_actual = (pv_output + wind_output) - hourly_original_abandon
+                    stats['wind_pv_actual_sum'] += hourly_original_actual + hourly_flexible_consumption
+                    # 负荷用电量
+                    stats['corrected_electric_sum'] += self.results['hourly_corrected_electric_load'][i]
+                
+                # 写入月度数据
+                for month in range(1, 13):
+                    stats = monthly_stats[month]
+                    abandon_rate = 0.0
+                    if stats['max_output_sum'] > 0:
+                        abandon_rate = (stats['abandon_sum'] / stats['max_output_sum']) * 100
+                    
+                    month_str = f"2026-{month:02d}"
+                    row = [
+                        month_str,
+                        stats['total_load_sum'],
+                        stats['generation_sum'],
+                        stats['thermal_sum'],
+                        stats['corrected_electric_sum'],
+                        stats['internal_electric_sum'],
+                        stats['max_output_sum'],
+                        stats['wind_pv_actual_sum'],
+                        stats['wind_pv_abandon_sum'],
+                        stats['grid_load_sum'],
+                        f"{abandon_rate:.2f}%"
+                    ]
+                    ws1.append(row)
+                
+                # 计算年度汇总
+                annual_totals = {
+                    'grid_load_sum': sum(monthly_stats[m]['grid_load_sum'] for m in range(1, 13)),
+                    'abandon_sum': sum(monthly_stats[m]['abandon_sum'] for m in range(1, 13)),
+                    'max_output_sum': sum(monthly_stats[m]['max_output_sum'] for m in range(1, 13)),
+                    'generation_sum': sum(monthly_stats[m]['generation_sum'] for m in range(1, 13)),
+                    'total_load_sum': sum(monthly_stats[m]['total_load_sum'] for m in range(1, 13)),
+                    'wind_pv_abandon_sum': sum(monthly_stats[m]['wind_pv_abandon_sum'] for m in range(1, 13)),
+                    'thermal_sum': sum(monthly_stats[m]['thermal_sum'] for m in range(1, 13)),
+                    'internal_electric_sum': sum(monthly_stats[m]['internal_electric_sum'] for m in range(1, 13)),
+                    'wind_pv_actual_sum': sum(monthly_stats[m]['wind_pv_actual_sum'] for m in range(1, 13)),
+                    'corrected_electric_sum': sum(monthly_stats[m]['corrected_electric_sum'] for m in range(1, 13))
+                }
+                
+                annual_abandon_rate = 0.0
+                if annual_totals['max_output_sum'] > 0:
+                    annual_abandon_rate = (annual_totals['abandon_sum'] / annual_totals['max_output_sum']) * 100
+                
+                # 写入年度汇总行
+                annual_row = [
+                    '年度汇总',
+                    annual_totals['total_load_sum'],
+                    annual_totals['generation_sum'],
+                    annual_totals['thermal_sum'],
+                    annual_totals['corrected_electric_sum'],
+                    annual_totals['internal_electric_sum'],
+                    annual_totals['max_output_sum'],
+                    annual_totals['wind_pv_actual_sum'],
+                    annual_totals['wind_pv_abandon_sum'],
+                    annual_totals['grid_load_sum'],
+                    f"{annual_abandon_rate:.2f}%"
+                ]
+                ws1.append(annual_row)
+            else:
+                ws1[f'A{current_row}'] = "暂无计算结果"
+                current_row += 1
+            
+            # 设置 Sheet1 列宽
+            ws1.column_dimensions['A'].width = 25
+            ws1.column_dimensions['B'].width = 20
+            ws1.column_dimensions['C'].width = 15
+            ws1.column_dimensions['D'].width = 15
+            
+            # ========== Sheet 2: 成本分析 ==========
+            ws2 = wb.create_sheet(title="成本分析")
+            
+            current_row = 1
+            
+            # 标题
+            ws2[f'A{current_row}'] = "成本分析 - 年度汇总结果"
+            ws2.merge_cells(f'A{current_row}:B{current_row}')
+            ws2[f'A{current_row}'].font = openpyxl.styles.Font(bold=True, size=14)
+            ws2[f'A{current_row}'].alignment = openpyxl.styles.Alignment(horizontal='center', vertical='center')
+            current_row += 2
+            
+            # 项目名称
+            ws2[f'A{current_row}'] = f"项目名称：{project_name}"
+            ws2.merge_cells(f'A{current_row}:B{current_row}')
+            current_row += 1
+            
+            # 导出时间
+            ws2[f'A{current_row}'] = f"导出时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+            ws2.merge_cells(f'A{current_row}:B{current_row}')
+            current_row += 2
+            
+            # 年度汇总结果
+            ws2[f'A{current_row}'] = "项目"
+            ws2[f'B{current_row}'] = "数值"
+            for cell in ['A', 'B']:
+                ws2[f'{cell}{current_row}'].font = openpyxl.styles.Font(bold=True)
+                ws2[f'{cell}{current_row}'].alignment = openpyxl.styles.Alignment(horizontal='center', vertical='center')
+            current_row += 1
+            
+            # 写入成本汇总数据（只保留项目和数值列）
+            for row_data in cost_summary_data:
+                ws2[f'A{current_row}'] = row_data[0]
+                ws2[f'B{current_row}'] = row_data[1] if len(row_data) > 1 else ''
+                current_row += 1
+            
+            # 设置 Sheet2 列宽
+            ws2.column_dimensions['A'].width = 30
+            ws2.column_dimensions['B'].width = 20
             
             # 保存文件
             wb.save(file_path)
