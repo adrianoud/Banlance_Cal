@@ -389,6 +389,7 @@ class CostV2Calculator:
             'green_cert_income': green_cert_income_wan,  # 万元（抵扣项）
             'total_energy': total_pv_actual_kwh,  # kWh - 使用实际消纳电量
             'unit_cost': unit_cost_yuan_kwh,  # 元/kWh
+            'variable_cost_per_kwh': variable_unit_cost,  # 元/kWh - 单位可变成本
             'hourly_variable_cost': [actual * variable_unit_cost for actual in wind_pv_actual_hourly]  # 每小时可变成本 (元)，基于实际出力
         }
     
@@ -499,6 +500,7 @@ class CostV2Calculator:
             'green_cert_income': green_cert_income_wan,  # 万元（抵扣项）
             'total_energy': total_wind_energy_kwh,  # kWh
             'unit_cost': unit_cost_yuan_kwh,  # 元/kWh
+            'variable_cost_per_kwh': variable_unit_cost,  # 元/kWh - 单位可变成本
             'hourly_variable_cost': [output * variable_unit_cost for output in wind_output_hourly]  # 每小时可变成本 (元)
         }
     

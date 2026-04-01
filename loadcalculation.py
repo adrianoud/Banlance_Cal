@@ -7141,8 +7141,18 @@ class EnergyBalanceApp:
             # 新能源绿证数量 = 消纳电量 / 1000
             renewable_green_cert_count = int(total_renewable_actual / 1000)  # 取整
             
-            # 平衡点电价 = 新能源单位成本
+            # 平衡点电价 = 新能源总成本 / 消纳电量 = 新能源单位成本
             break_even_price = renewable_unit_cost
+            
+            # 保存计算所需的参数用于后续分析表
+            self.break_even_params = {
+                'total_pv_generation': total_pv_generation,
+                'total_wind_generation': total_wind_generation,
+                'pv_fixed_cost': pv['fixed_cost'] if 'fixed_cost' in pv else 0.0,
+                'wind_fixed_cost': wind['fixed_cost'] if 'fixed_cost' in wind else 0.0,
+                'pv_variable_cost_per_kwh': pv['variable_cost_per_kwh'] if 'variable_cost_per_kwh' in pv else 0.0,
+                'wind_variable_cost_per_kwh': wind['variable_cost_per_kwh'] if 'variable_cost_per_kwh' in wind else 0.0,
+            }
             
             summary_data.extend([
                 ('', '', ''),
@@ -7154,7 +7164,7 @@ class EnergyBalanceApp:
                 ('新能源单位成本', f"{renewable_unit_cost:.4f} 元/kWh", ''),
                 ('新能源到户电价', f"{renewable_sale_price:.4f} 元/kWh", ''),
                 ('新能源绿证数量', f"{renewable_green_cert_count} 个", ''),
-                ('平衡点电价', f"{break_even_price:.4f} 元/kWh", ''),
+                ('平衡点电价', f"{break_even_price:.4f} 元/kWh", '📊 点击查看分析表'),
             ])
             
             # ========== 五、下网电部分 ==========
@@ -7180,6 +7190,160 @@ class EnergyBalanceApp:
             import traceback
             traceback.print_exc()
             messagebox.showerror("错误", f"更新汇总表格失败：{str(e)}")
+    
+    def on_summary_tree_double_click(self, event):
+        """
+        处理 Treeview 双击事件，打开平衡点电价分析表
+        """
+        # 获取选中的行
+        selection = self.v2_summary_tree.selection()
+        if not selection:
+            return
+        
+        # 获取选中行的数据
+        item = self.v2_summary_tree.item(selection[0])
+        values = item['values']
+        
+        # 检查是否是"平衡点电价"行
+        if len(values) >= 1 and '平衡点电价' in str(values[0]):
+            # 打开平衡点电价分析表
+            self.show_break_even_price_analysis()
+    
+    def show_break_even_price_analysis(self):
+        """
+        显示平衡点电价分析表弹窗
+        """
+        try:
+            # 检查是否有计算参数
+            if not hasattr(self, 'break_even_params') or not self.break_even_params:
+                messagebox.showwarning(
+                    "提示",
+                    "暂无平衡点电价分析数据！\n\n请先进行成本分析计算。"
+                )
+                return
+            
+            params = self.break_even_params
+            
+            # 创建弹窗
+            dialog = tk.Toplevel(self.root)
+            dialog.title("平衡点电价分析表")
+            dialog.geometry("500x450")
+            dialog.transient(self.root)  # 设置为子窗口
+            dialog.grab_set()  # 模态对话框
+            
+            # 创建主框架
+            main_frame = ttk.Frame(dialog, padding="10")
+            main_frame.pack(fill=tk.BOTH, expand=True)
+            
+            # 标题
+            title_label = ttk.Label(
+                main_frame,
+                text="平衡点电价分析表",
+                font=('Arial', 14, 'bold')
+            )
+            title_label.pack(pady=(0, 10))
+            
+            # 说明文字
+            info_text = (
+                "基于当前新能源发电量及成本参数，\n"
+                "分析不同弃电率下的消纳电量及平衡点电价"
+            )
+            info_label = ttk.Label(main_frame, text=info_text, foreground="gray")
+            info_label.pack(pady=(0, 10))
+            
+            # 创建表格
+            columns = ('假设弃电率 (%)', '消纳电量 (万度)', '平衡点电价 (元/kWh)')
+            tree = ttk.Treeview(main_frame, columns=columns, show='headings', height=12)
+            
+            # 设置列标题
+            for col in columns:
+                tree.heading(col, text=col)
+                tree.column(col, width=150, anchor='center')
+            
+            # 添加滚动条
+            scrollbar = ttk.Scrollbar(main_frame, orient=tk.VERTICAL, command=tree.yview)
+            tree.configure(yscrollcommand=scrollbar.set)
+            
+            # 计算并填充数据
+            total_pv_gen = params['total_pv_generation']  # kWh
+            total_wind_gen = params['total_wind_generation']  # kWh
+            total_renewable_gen = total_pv_gen + total_wind_gen  # kWh
+            total_renewable_gen_wan = total_renewable_gen / 10000.0  # 万度
+            
+            pv_fixed = params['pv_fixed_cost']  # 万元
+            wind_fixed = params['wind_fixed_cost']  # 万元
+            total_fixed_cost = pv_fixed + wind_fixed  # 万元
+            
+            pv_var_per_kwh = params['pv_variable_cost_per_kwh']  # 元/kWh
+            wind_var_per_kwh = params['wind_variable_cost_per_kwh']  # 元/kWh
+            
+            # 计算光伏和风电的比例
+            if total_renewable_gen > 0:
+                pv_ratio = total_pv_gen / total_renewable_gen
+                wind_ratio = total_wind_gen / total_renewable_gen
+            else:
+                pv_ratio = 0.5
+                wind_ratio = 0.5
+            
+            # 生成 11 个数据点（0% 到 100%，间隔 10%）
+            for abandon_rate_percent in range(0, 101, 10):
+                abandon_rate = abandon_rate_percent / 100.0
+                
+                # 消纳电量 = 新能源最大发电量 × (1 - 弃电率)
+                consumed_energy_kwh = total_renewable_gen * (1 - abandon_rate)
+                consumed_energy_wan = consumed_energy_kwh / 10000.0  # 万度
+                
+                # 计算平衡点电价
+                if consumed_energy_kwh > 0:
+                    # 光伏消纳电量
+                    pv_consumed = consumed_energy_kwh * pv_ratio
+                    # 风电消纳电量
+                    wind_consumed = consumed_energy_kwh * wind_ratio
+                    
+                    # 可变成本 = 光伏单位可变成本 × 光伏消纳电量 + 风电单位可变成本 × 风电消纳电量
+                    variable_cost_yuan = pv_var_per_kwh * pv_consumed + wind_var_per_kwh * wind_consumed
+                    variable_cost_wan = variable_cost_yuan / 10000.0  # 万元
+                    
+                    # 新能源总成本 = 固定成本 + 可变成本
+                    total_cost_wan = total_fixed_cost + variable_cost_wan  # 万元
+                    
+                    # 平衡点电价 = 新能源总成本 / 消纳电量
+                    # 万元 / 万度 = 元/kWh
+                    break_even_price = total_cost_wan / consumed_energy_wan
+                    
+                    # 格式化数据
+                    row = (
+                        f"{abandon_rate_percent}%",
+                        f"{consumed_energy_wan:.1f}",
+                        f"{break_even_price:.4f}"
+                    )
+                else:
+                    # 弃电率 100% 时，消纳电量为 0，平衡点电价为无穷大
+                    row = (
+                        f"{abandon_rate_percent}%",
+                        f"0.0",
+                        "∞"
+                    )
+                
+                tree.insert('', tk.END, values=row)
+            
+            # 布局
+            tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+            scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+            
+            # 关闭按钮
+            close_btn = ttk.Button(
+                main_frame,
+                text="关闭",
+                command=dialog.destroy
+            )
+            close_btn.pack(pady=(10, 0))
+            
+        except Exception as e:
+            print(f"显示平衡点电价分析表失败：{str(e)}")
+            import traceback
+            traceback.print_exc()
+            messagebox.showerror("错误", f"显示平衡点电价分析表失败：{str(e)}")
     
     def update_v2_cost_analysis(self):
         """
@@ -7617,9 +7781,105 @@ class EnergyBalanceApp:
                 ws2[f'B{current_row}'] = row_data[1] if len(row_data) > 1 else ''
                 current_row += 1
             
+            # ===== 添加平衡点电价分析表 =====
+            current_row += 2  # 空一行
+            
+            # 标题
+            ws2[f'A{current_row}'] = "平衡点电价分析表"
+            ws2.merge_cells(f'A{current_row}:C{current_row}')
+            ws2[f'A{current_row}'].font = openpyxl.styles.Font(bold=True, size=14)
+            ws2[f'A{current_row}'].alignment = openpyxl.styles.Alignment(horizontal='center', vertical='center')
+            current_row += 1
+            
+            # 说明文字
+            ws2[f'A{current_row}'] = "基于当前新能源发电量及成本参数，分析不同弃电率下的消纳电量及平衡点电价"
+            ws2.merge_cells(f'A{current_row}:C{current_row}')
+            ws2[f'A{current_row}'].font = openpyxl.styles.Font(italic=True, size=10)
+            ws2[f'A{current_row}'].alignment = openpyxl.styles.Alignment(horizontal='left', vertical='center')
+            current_row += 2
+            
+            # 表头
+            ws2[f'A{current_row}'] = "假设弃电率 (%)"
+            ws2[f'B{current_row}'] = "消纳电量 (万度)"
+            ws2[f'C{current_row}'] = "平衡点电价 (元/kWh)"
+            for cell in ['A', 'B', 'C']:
+                ws2[f'{cell}{current_row}'].font = openpyxl.styles.Font(bold=True)
+                ws2[f'{cell}{current_row}'].alignment = openpyxl.styles.Alignment(horizontal='center', vertical='center')
+            current_row += 1
+            
+            # 计算并填充数据
+            if hasattr(self, 'break_even_params') and self.break_even_params:
+                params = self.break_even_params
+                total_pv_gen = params['total_pv_generation']  # kWh
+                total_wind_gen = params['total_wind_generation']  # kWh
+                total_renewable_gen = total_pv_gen + total_wind_gen  # kWh
+                
+                pv_fixed = params['pv_fixed_cost']  # 万元
+                wind_fixed = params['wind_fixed_cost']  # 万元
+                total_fixed_cost = pv_fixed + wind_fixed  # 万元
+                
+                pv_var_per_kwh = params['pv_variable_cost_per_kwh']  # 元/kWh
+                wind_var_per_kwh = params['wind_variable_cost_per_kwh']  # 元/kWh
+                
+                # 计算光伏和风电的比例
+                if total_renewable_gen > 0:
+                    pv_ratio = total_pv_gen / total_renewable_gen
+                    wind_ratio = total_wind_gen / total_renewable_gen
+                else:
+                    pv_ratio = 0.5
+                    wind_ratio = 0.5
+                
+                # 生成 11 个数据点（0% 到 100%，间隔 10%）
+                for abandon_rate_percent in range(0, 101, 10):
+                    abandon_rate = abandon_rate_percent / 100.0
+                    
+                    # 消纳电量 = 新能源最大发电量 × (1 - 弃电率)
+                    consumed_energy_kwh = total_renewable_gen * (1 - abandon_rate)
+                    consumed_energy_wan = consumed_energy_kwh / 10000.0  # 万度
+                    
+                    # 计算平衡点电价
+                    if consumed_energy_kwh > 0:
+                        # 光伏消纳电量
+                        pv_consumed = consumed_energy_kwh * pv_ratio
+                        # 风电消纳电量
+                        wind_consumed = consumed_energy_kwh * wind_ratio
+                        
+                        # 可变成本 = 光伏单位可变成本 × 光伏消纳电量 + 风电单位可变成本 × 风电消纳电量
+                        variable_cost_yuan = pv_var_per_kwh * pv_consumed + wind_var_per_kwh * wind_consumed
+                        variable_cost_wan = variable_cost_yuan / 10000.0  # 万元
+                        
+                        # 新能源总成本 = 固定成本 + 可变成本
+                        total_cost_wan = total_fixed_cost + variable_cost_wan  # 万元
+                        
+                        # 平衡点电价 = 新能源总成本 / 消纳电量
+                        # 万元 / 万度 = 元/kWh
+                        break_even_price = total_cost_wan / consumed_energy_wan
+                        
+                        # 写入数据
+                        ws2[f'A{current_row}'] = f"{abandon_rate_percent}%"
+                        ws2[f'B{current_row}'] = f"{consumed_energy_wan:.1f}"
+                        ws2[f'C{current_row}'] = f"{break_even_price:.4f}"
+                    else:
+                        # 弃电率 100% 时，消纳电量为 0，平衡点电价为无穷大
+                        ws2[f'A{current_row}'] = f"{abandon_rate_percent}%"
+                        ws2[f'B{current_row}'] = "0.0"
+                        ws2[f'C{current_row}'] = "∞"
+                    
+                    # 设置对齐方式
+                    for cell in ['A', 'B', 'C']:
+                        ws2[f'{cell}{current_row}'].alignment = openpyxl.styles.Alignment(horizontal='center', vertical='center')
+                    
+                    current_row += 1
+            else:
+                ws2[f'A{current_row}'] = "暂无计算数据，请先进行成本分析计算"
+                ws2.merge_cells(f'A{current_row}:C{current_row}')
+                ws2[f'A{current_row}'].font = openpyxl.styles.Font(italic=True, size=10)
+                current_row += 1
+            
             # 设置 Sheet2 列宽
-            ws2.column_dimensions['A'].width = 30
+            ws2.column_dimensions['A'].width = 20
             ws2.column_dimensions['B'].width = 20
+            ws2.column_dimensions['C'].width = 22
             
             # 保存文件
             wb.save(file_path)
@@ -8225,6 +8485,9 @@ class EnergyBalanceApp:
         
         # 初始化汇总数据
         self.init_v2_cost_summary()
+        
+        # 绑定 Treeview 双击事件，用于打开平衡点电价分析表
+        self.v2_summary_tree.bind('<Double-1>', self.on_summary_tree_double_click)
         
         right_summary_frame.columnconfigure(0, weight=1)
         right_summary_frame.rowconfigure(0, weight=1)
