@@ -45,9 +45,6 @@ class UIManager:
         # 计算与结果标签页（调用 app 中的原始完整方法）
         self.app.create_calculation_tab(notebook)
         
-        # 成本详细分析标签页（调用 app 中的原始完整方法）
-        self.app.create_detailed_cost_analysis_tab(notebook)
-        
         # 成本分析 2.0 标签页（使用 UI 管理器的完整实现）
         self.create_cost_analysis_v2_tab(notebook)
     
@@ -175,31 +172,7 @@ class UIManager:
         
         # ... (其他代码保持不变，为简洁省略)
     
-    def create_detailed_cost_analysis_tab(self, notebook):
-        """创建成本详细分析标签页"""
-        tab = ttk.Frame(notebook, padding="10")
-        notebook.add(tab, text="📊 成本详细分析")
-        
-        # 顶部按钮区域
-        top_button_frame = ttk.Frame(tab)
-        top_button_frame.grid(row=0, column=0, sticky=tk.E, padx=5, pady=5)
-        
-        # 添加刷新数据按钮
-        refresh_btn = ttk.Button(top_button_frame, text="🔄 刷新成本数据", 
-                                command=self.app.update_detailed_cost_analysis)
-        refresh_btn.pack(side=tk.RIGHT, padx=5)
-        
-        # 添加保存按钮
-        save_btn = ttk.Button(top_button_frame, text="💾 保存成本参数", 
-                             command=self.app.save_detailed_cost_parameters)
-        save_btn.pack(side=tk.RIGHT, padx=5)
-        
-        # 添加返回项目列表按钮
-        back_btn = ttk.Button(top_button_frame, text="保存并返回项目列表",
-                             command=self.app.save_and_return_to_project_list)
-        back_btn.pack(side=tk.RIGHT, padx=5)
-        
-        # ... (其他代码保持不变，为简洁省略)
+
     
     def create_cost_analysis_v2_tab(self, notebook):
         """
