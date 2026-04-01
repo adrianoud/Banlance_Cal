@@ -7164,7 +7164,7 @@ class EnergyBalanceApp:
                 ('新能源单位成本', f"{renewable_unit_cost:.4f} 元/kWh", ''),
                 ('新能源到户电价', f"{renewable_sale_price:.4f} 元/kWh", ''),
                 ('新能源绿证数量', f"{renewable_green_cert_count} 个", ''),
-                ('平衡点电价', f"{break_even_price:.4f} 元/kWh", '📊 点击查看分析表'),
+                ('平衡点电价', f"{break_even_price:.4f} 元/kWh", ''),
             ])
             
             # ========== 五、下网电部分 ==========
@@ -7190,24 +7190,6 @@ class EnergyBalanceApp:
             import traceback
             traceback.print_exc()
             messagebox.showerror("错误", f"更新汇总表格失败：{str(e)}")
-    
-    def on_summary_tree_double_click(self, event):
-        """
-        处理 Treeview 双击事件，打开平衡点电价分析表
-        """
-        # 获取选中的行
-        selection = self.v2_summary_tree.selection()
-        if not selection:
-            return
-        
-        # 获取选中行的数据
-        item = self.v2_summary_tree.item(selection[0])
-        values = item['values']
-        
-        # 检查是否是"平衡点电价"行
-        if len(values) >= 1 and '平衡点电价' in str(values[0]):
-            # 打开平衡点电价分析表
-            self.show_break_even_price_analysis()
     
     def show_break_even_price_analysis(self):
         """
@@ -7253,7 +7235,7 @@ class EnergyBalanceApp:
             
             # 创建表格
             columns = ('假设弃电率 (%)', '消纳电量 (万度)', '平衡点电价 (元/kWh)')
-            tree = ttk.Treeview(main_frame, columns=columns, show='headings', height=12)
+            tree = ttk.Treeview(main_frame, columns=columns, show='headings', height=10)
             
             # 设置列标题
             for col in columns:
@@ -7285,8 +7267,8 @@ class EnergyBalanceApp:
                 pv_ratio = 0.5
                 wind_ratio = 0.5
             
-            # 生成 11 个数据点（0% 到 100%，间隔 10%）
-            for abandon_rate_percent in range(0, 101, 10):
+            # 生成 10 个数据点（0% 到 90%，间隔 10%）
+            for abandon_rate_percent in range(0, 100, 10):
                 abandon_rate = abandon_rate_percent / 100.0
                 
                 # 消纳电量 = 新能源最大发电量 × (1 - 弃电率)
@@ -7829,8 +7811,8 @@ class EnergyBalanceApp:
                     pv_ratio = 0.5
                     wind_ratio = 0.5
                 
-                # 生成 11 个数据点（0% 到 100%，间隔 10%）
-                for abandon_rate_percent in range(0, 101, 10):
+                # 生成 10 个数据点（0% 到 90%，间隔 10%）
+                for abandon_rate_percent in range(0, 100, 10):
                     abandon_rate = abandon_rate_percent / 100.0
                     
                     # 消纳电量 = 新能源最大发电量 × (1 - 弃电率)
@@ -7859,11 +7841,6 @@ class EnergyBalanceApp:
                         ws2[f'A{current_row}'] = f"{abandon_rate_percent}%"
                         ws2[f'B{current_row}'] = f"{consumed_energy_wan:.1f}"
                         ws2[f'C{current_row}'] = f"{break_even_price:.4f}"
-                    else:
-                        # 弃电率 100% 时，消纳电量为 0，平衡点电价为无穷大
-                        ws2[f'A{current_row}'] = f"{abandon_rate_percent}%"
-                        ws2[f'B{current_row}'] = "0.0"
-                        ws2[f'C{current_row}'] = "∞"
                     
                     # 设置对齐方式
                     for cell in ['A', 'B', 'C']:
@@ -8063,6 +8040,10 @@ class EnergyBalanceApp:
         # 顶部按钮区域
         top_button_frame = ttk.Frame(tab)
         top_button_frame.grid(row=0, column=0, sticky=tk.E, padx=5, pady=5)
+        
+        # 添加平衡点电价分析表按钮
+        break_even_btn = ttk.Button(top_button_frame, text="📊 平衡点电价分析表", command=self.show_break_even_price_analysis)
+        break_even_btn.pack(side=tk.RIGHT, padx=5)
         
         # 添加刷新数据按钮
         refresh_btn = ttk.Button(top_button_frame, text="🔄 刷新成本数据", command=self.update_v2_cost_analysis)
@@ -8485,9 +8466,6 @@ class EnergyBalanceApp:
         
         # 初始化汇总数据
         self.init_v2_cost_summary()
-        
-        # 绑定 Treeview 双击事件，用于打开平衡点电价分析表
-        self.v2_summary_tree.bind('<Double-1>', self.on_summary_tree_double_click)
         
         right_summary_frame.columnconfigure(0, weight=1)
         right_summary_frame.rowconfigure(0, weight=1)
